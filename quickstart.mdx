@@ -124,7 +124,7 @@ description: "Get Dory running in minutes with Docker or the desktop app, then c
           -e BETTER_AUTH_SECRET="your_existing_auth_secret" \
           -e BETTER_AUTH_URL="http://localhost:3000" \
           -e DORY_AI_PROVIDER=anthropic \
-          -e DORY_AI_MODEL=claude-3-5-sonnet-20241022 \
+          -e DORY_AI_MODEL=claude-3-5-sonnet-latest \
           -e DORY_AI_API_KEY=sk-ant-... \
           dorylab/dory:latest
         ```
@@ -259,7 +259,7 @@ description: "Get Dory running in minutes with Docker or the desktop app, then c
 
 ## What you can do now
 
-<Columns cols={2}>
+<CardGroup cols={2}>
   <Card title="SQL Copilot" icon="wand-magic-sparkles" href="/ai/sql-copilot">
     Generate SQL from natural language, fix errors, and get query explanations grounded in your real schema
   </Card>
@@ -272,4 +272,4 @@ description: "Get Dory running in minutes with Docker or the desktop app, then c
   <Card title="ClickHouse monitoring" icon="chart-line" href="/clickhouse/monitoring">
     Real-time query metrics, P50/P95 latency trends, and multi-dimensional filtering
   </Card>
-</Columns>
+</CardGroup>

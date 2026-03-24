@@ -115,6 +115,7 @@
               "api-reference/monitoring/summary",
               "api-reference/monitoring/query-logs",
               "api-reference/monitoring/slow-queries",
+              "api-reference/monitoring/error-queries",
               "api-reference/monitoring/timeline"
             ]
           },
