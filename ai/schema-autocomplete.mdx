@@ -1,0 +1,124 @@
+---
+title: "Schema-aware autocomplete"
+description: "SQL completions powered by your real database schema — tables, columns, functions, and aliases."
+---
+
+Dory's SQL editor provides completions based on your live database schema. As you type, it suggests table names, column names, functions, and aliases drawn from your connected database — not from a generic keyword list.
+
+<CardGroup cols={2}>
+  <Card title="Tables and columns" icon="table">
+    Suggests real table names and their columns as you type, including column types and primary key markers.
+  </Card>
+  <Card title="Functions" icon="function">
+    Provides completions for SQL functions appropriate to the connected database dialect (ClickHouse, PostgreSQL, MySQL).
+  </Card>
+  <Card title="Multi-table joins" icon="code-merge">
+    Understands which tables are referenced in the current query and suggests columns from all joined tables.
+  </Card>
+  <Card title="Subqueries" icon="layer-group">
+    Tracks aliases defined in subqueries and CTEs, making them available as completion candidates in outer scopes.
+  </Card>
+</CardGroup>
+
+## What gets suggested
+
+### Tables
+
+When you type in the `FROM`, `JOIN`, or other table-reference positions, autocomplete fetches the list of tables in the active database and presents them as candidates. Table names include the database context when you are working across multiple databases.
+
+### Columns
+
+Once a table is referenced in the query, autocomplete loads its columns from the schema cache. Suggestions include:
+
+- Column name
+- Column type (e.g., `UInt64`, `String`, `DateTime`)
+- Primary key marker
+- Column comment (when available in the schema metadata)
+
+For example, after typing `SELECT ` in a query that references the `orders` table, completions include `order_id`, `customer_id`, `status`, `total_amount`, and other columns from that table.
+
+### Aliases
+
+Column and table aliases defined in the current query are tracked and offered as completions in positions where they are in scope. This includes:
+
+- Table aliases (e.g., `orders AS o` — `o` becomes a valid prefix)
+- Column aliases defined in a `SELECT` clause and referenced in `ORDER BY` or `HAVING`
+- CTE names defined with `WITH ... AS (...)`
+
+### Functions
+
+Dory provides completions for functions specific to the connected database dialect. ClickHouse connections surface ClickHouse-specific aggregate functions, date/time functions, and type conversion functions. PostgreSQL and MySQL connections surface their respective function sets.
+
+## Multi-table join support
+
+When your query joins multiple tables, autocomplete tracks all referenced tables and makes their columns available simultaneously. As you move to each column reference position, completions draw from all tables currently in scope.
+
+**Example:** A query joining `orders` and `customers`:
+
+```sql
+SELECT
+    o.order_id,
+    o.total_amount,
+    c.  -- completions here include: customer_id, name, email, region, ...
+FROM orders AS o
+JOIN customers AS c ON o.customer_id = c.customer_id
+```
+
+At the `c.` position, completions include all columns from the `customers` table.
+
+## Subquery support
+
+Aliases and column references defined in subqueries are available as completions in the outer query scope. CTEs defined with `WITH` are treated as named table aliases and their columns are offered as completions when you reference the CTE name.
+
+**Example:**
+
+```sql
+WITH recent_orders AS (
+    SELECT order_id, customer_id, total_amount
+    FROM orders
+    WHERE created_at >= now() - INTERVAL 7 DAY
+)
+SELECT
+    r.  -- completions here include: order_id, customer_id, total_amount
+FROM recent_orders AS r
+```
+
+## How it works — schema cache
+
+Dory maintains a schema cache per connection to avoid fetching metadata on every keystroke:
+
+1. When you open a connection, Dory fetches the table list for the active database in the background.
+2. When a table is first referenced in a query, Dory fetches that table's columns and caches them for the session.
+3. Column metadata includes name, type, primary key status, and any comments stored in the database.
+4. The cache is refreshed when you switch databases or reload the schema browser.
+
+This means the first completion in a new session may have a short delay while metadata is fetched. Subsequent completions for the same tables are served from the cache.
+
+<Note>
+  Schema autocomplete works independently of the AI provider. Table and column suggestions come directly from database metadata queries, not from a language model. No AI key is required for basic schema completions.
+</Note>
+
+## AI-enriched completions
+
+When an AI provider is configured, Dory augments the schema cache with additional metadata computed by the AI pipeline:
+
+- **Semantic tags** — 2–4 short tags per column (e.g., `primary key`, `time`, `low-cardinality`, `status`, `amount`) computed by the `schema.tag` prompt.
+- **Column explanations** — a 15–25 word plain-English description per column computed by the `schema.explain` prompt.
+- **Table summaries** — a structured summary of the table's purpose, typical queries, and highlighted fields computed by the `schema.summary` prompt.
+
+These enrichments are computed once per table and cached. They appear as additional context in the completion tooltip and in the Copilot context panel.
+
+<Tip>
+  If you want AI-enriched completions but are using a cost-sensitive provider, the enrichment tasks use the fast model preset (e.g., `gpt-4o-mini` for OpenAI, `claude-3-5-haiku-latest` for Anthropic) to keep costs low.
+</Tip>
+
+## Keyboard shortcuts
+
+| Action | Shortcut |
+|---|---|
+| Trigger completions manually | `Ctrl+Space` (Windows/Linux) / `Cmd+Space` (macOS) |
+| Accept suggestion | `Tab` or `Enter` |
+| Dismiss completions | `Escape` |
+| Navigate suggestions | `↑` / `↓` |
+
+Completions also appear automatically as you type in identifier positions — after `SELECT`, `FROM`, `JOIN`, `WHERE`, and following a `.` after a table or alias name.

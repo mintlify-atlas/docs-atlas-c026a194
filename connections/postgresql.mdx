@@ -1,0 +1,148 @@
+---
+title: "PostgreSQL"
+description: "Connect Dory to PostgreSQL databases (Beta)."
+---
+
+<Warning>
+  PostgreSQL support is in Beta. Core SQL editing, schema browsing, and AI copilot features work. Advanced capabilities such as query monitoring and privilege management are not yet available for PostgreSQL.
+</Warning>
+
+## Connection parameters
+
+<ParamField path="body.host" type="string" required>
+  Hostname or IP address of the PostgreSQL server. You can also provide a full `postgresql://` or `postgres://` connection URL — the driver parses it and extracts host, port, database, username, and password.
+</ParamField>
+
+<ParamField path="body.port" type="number">
+  PostgreSQL port. Defaults to `5432`.
+</ParamField>
+
+<ParamField path="body.database" type="string">
+  Database name to connect to. Defaults to `postgres` if not specified.
+</ParamField>
+
+<ParamField path="body.username" type="string" required>
+  PostgreSQL username.
+</ParamField>
+
+<ParamField path="body.password" type="string">
+  PostgreSQL password. Stored encrypted.
+</ParamField>
+
+### Advanced options
+
+Pass these as JSON in the **Options** field:
+
+| Option | Type | Description |
+|---|---|---|
+| `sslmode` | string | One of `disable`, `require`, `verify-full`. Controls TLS behaviour. |
+| `ssl` | boolean or object | `true` enables TLS without certificate verification. Pass an object for full `pg` SSL config. |
+| `schema` | string | Sets `search_path` for every query in this connection. Comma-separated for multiple schemas. |
+| `request_timeout` | number | Query timeout in milliseconds (`query_timeout` on the pool). |
+| `statement_timeout` | number | Statement-level timeout in milliseconds. Set per session via `SET statement_timeout`. |
+| `connection_timeout` | number | Connection acquisition timeout in milliseconds. Defaults to 20 000 ms. |
+| `application_name` | string | Value passed as `application_name` to PostgreSQL. Defaults to `dory`. |
+
+## SSL modes
+
+The driver maps the `sslmode` option to the `pg` pool SSL config:
+
+| `sslmode` | Behaviour |
+|---|---|
+| `disable` | TLS disabled. |
+| `require` | TLS enabled; certificate not verified (`rejectUnauthorized: false`). |
+| `verify-full` | TLS enabled; certificate verified (`rejectUnauthorized: true`). |
+
+If you set `ssl: true` directly (without `sslmode`), the driver enables TLS with `rejectUnauthorized: false`.
+
+```typescript
+// from apps/web/lib/connection/drivers/postgres/postgres-driver.ts
+if (sslMode === 'disable') ssl = false;
+if (sslMode === 'require') ssl = { rejectUnauthorized: false };
+if (sslMode === 'verify-full') ssl = { rejectUnauthorized: true };
+```
+
+## Connection string format
+
+You can paste a full connection URL into the **Host** field:
+
+```
+postgresql://username:password@hostname:5432/database
+postgres://hostname/database?sslmode=require
+```
+
+The driver extracts all components from the URL. Values specified explicitly in the form (username, password, port) take precedence over values parsed from the URL.
+
+<Note>
+  The `sslmode=require` query parameter in a connection URL is parsed and applied automatically.
+</Note>
+
+## Connection pooling
+
+The PostgreSQL driver uses `pg.Pool` with these defaults:
+
+| Setting | Value |
+|---|---|
+| Max connections | 10 |
+| Idle timeout | 30 000 ms |
+| Connection timeout | 20 000 ms (overridable via `connection_timeout`) |
+
+The pool is managed by the Dory datasource pool layer, which pings the pool before reuse and reconnects automatically if the ping fails.
+
+## PostgreSQL cloud services
+
+<Tabs>
+  <Tab title="Supabase">
+    Supabase exposes a standard PostgreSQL connection over TLS.
+
+    | Field | Value |
+    |---|---|
+    | Host | `db.<project-ref>.supabase.co` |
+    | Port | `5432` |
+    | Database | `postgres` |
+    | Username | `postgres` (or a custom role) |
+    | Options | `{"sslmode": "require"}` |
+
+    <Tip>
+      Supabase also offers a connection pooler (Supavisor) on port 6543. Use the direct connection port 5432 for Dory to avoid session-mode restrictions.
+    </Tip>
+  </Tab>
+  <Tab title="Neon">
+    Neon uses serverless PostgreSQL with TLS required.
+
+    | Field | Value |
+    |---|---|
+    | Host | `<endpoint-id>.neon.tech` |
+    | Port | `5432` |
+    | Database | Your database name |
+    | Username | Your Neon role |
+    | Options | `{"sslmode": "require"}` |
+  </Tab>
+  <Tab title="Amazon RDS">
+    RDS PostgreSQL instances are typically on private VPCs. You will likely need an SSH tunnel or VPN.
+
+    | Field | Value |
+    |---|---|
+    | Host | Your RDS endpoint (e.g. `mydb.xxxx.us-east-1.rds.amazonaws.com`) |
+    | Port | `5432` |
+    | SSL | `{"sslmode": "require"}` recommended |
+
+    For private RDS instances, configure an [SSH tunnel](/connections/ssh-tunnel) via a bastion host.
+  </Tab>
+  <Tab title="Self-hosted">
+    | Field | Value |
+    |---|---|
+    | Host | IP address or hostname |
+    | Port | `5432` |
+    | SSL | As configured on your server |
+
+    If the server is on a private network, use an [SSH tunnel](/connections/ssh-tunnel).
+  </Tab>
+</Tabs>
+
+## Known limitations (Beta)
+
+- Query monitoring and metrics dashboards are not available for PostgreSQL connections.
+- Privilege management (user and role UI) is ClickHouse-only at this time.
+- Cross-database queries are not supported through the connection UI. Use schema-qualified table names within the connected database instead.
+- The `BIGINT` (`int8`) and `NUMERIC` types are returned as strings to preserve precision beyond JavaScript's `Number` range.

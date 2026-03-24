@@ -1,0 +1,129 @@
+---
+title: "Billing"
+description: "Configure Stripe billing for hosted Dory deployments."
+---
+
+Dory integrates [Stripe](https://stripe.com) for subscription billing. Billing is an **opt-in feature** — it activates only when Stripe environment variables are present and the server runtime is not desktop.
+
+<Warning>
+  Billing is not available in the **desktop app** (`DORY_RUNTIME=desktop`). The billing UI and subscription checks are suppressed entirely in that runtime.
+</Warning>
+
+## Plan tiers
+
+Dory defines two organization-level plans in `apps/web/lib/billing/types.ts`:
+
+| Plan | Type | Description |
+|------|------|-------------|
+| `hobby` | Default | No active subscription. All users start on this plan. |
+| `pro` | Paid | Active or trialing Stripe subscription with `plan: 'pro'`. |
+
+The active plan is determined at runtime by `normalizeOrganizationBillingStatus`. An organization is on the `pro` plan when it has a subscription record with `status: 'active'` or `status: 'trialing'` and `plan: 'pro'`. All other states — `incomplete`, `past_due`, `canceled`, `unpaid`, `paused` — resolve to `hobby`.
+
+## When billing is available
+
+Billing activates when all three Stripe variables are set **and** the runtime is not desktop:
+
+```bash
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRO_MONTHLY_PRICE_ID=price_...
+```
+
+If any of these are missing, the Stripe plugin is not loaded and all organizations default to the `hobby` plan silently.
+
+## Setup
+
+<Steps>
+  <Step title="Create a Stripe account and product">
+    Sign in to the [Stripe Dashboard](https://dashboard.stripe.com). Create a product for your Dory Pro plan, then create a monthly recurring price for it. Copy the price ID (starts with `price_`).
+  </Step>
+  <Step title="Get your API key">
+    Go to **Developers → API keys**. Copy the **Secret key** (starts with `sk_live_` or `sk_test_` for test mode).
+  </Step>
+  <Step title="Create a webhook endpoint">
+    Go to **Developers → Webhooks → Add endpoint**. Set the endpoint URL to:
+    ```
+    https://<your-domain>/api/auth/stripe/webhook
+    ```
+    Select at minimum these events:
+    - `customer.subscription.created`
+    - `customer.subscription.updated`
+    - `customer.subscription.deleted`
+    - `checkout.session.completed`
+
+    Copy the **Signing secret** (starts with `whsec_`).
+  </Step>
+  <Step title="Add environment variables">
+    ```bash
+    STRIPE_SECRET_KEY=sk_live_your_key
+    STRIPE_WEBHOOK_SECRET=whsec_your_signing_secret
+    STRIPE_PRO_MONTHLY_PRICE_ID=price_your_price_id
+    ```
+  </Step>
+  <Step title="Restart Dory">
+    Restart the server. The Stripe plugin loads on boot when all three variables are present.
+  </Step>
+</Steps>
+
+## Environment variables
+
+<ParamField path="STRIPE_SECRET_KEY" type="string">
+  Stripe secret API key. Use `sk_test_...` for test mode or `sk_live_...` for production.
+</ParamField>
+
+<ParamField path="STRIPE_WEBHOOK_SECRET" type="string">
+  Webhook signing secret used to verify that incoming webhook payloads originate from Stripe. Found in the Stripe Dashboard under **Developers → Webhooks**.
+</ParamField>
+
+<ParamField path="STRIPE_PRO_MONTHLY_PRICE_ID" type="string">
+  The Stripe price ID for the Pro monthly plan (e.g. `price_1Abc...`). This maps to the single `pro` subscription plan.
+</ParamField>
+
+## How subscriptions work
+
+Subscriptions in Dory are scoped to **organizations**, not individual user accounts. When an owner upgrades, Stripe creates a customer record associated with the organization's `stripeCustomerId`.
+
+- **Upgrade to Pro** — Redirects the owner to a Stripe Checkout session. On success, Stripe sends a webhook that updates the subscription record. The owner's email is synced to the Stripe customer before checkout.
+- **Manage subscription** — Redirects to the Stripe Customer Portal, where the owner can update payment methods, download invoices, or cancel.
+- **Cancellation** — Cancellations are `cancelAtPeriodEnd` by default. The organization remains on `pro` until `periodEnd`, then transitions back to `hobby`.
+
+<Note>
+  Only organization members with the `owner` role can view and manage billing. `admin`, `member`, and `viewer` roles see billing status but cannot access the Checkout or Customer Portal. This is enforced by `canManageOrganizationBilling(role)` in `apps/web/lib/billing/authz.ts`.
+</Note>
+
+## Subscription statuses
+
+The `BillingSubscriptionStatus` type reflects Stripe's subscription states:
+
+| Status | Meaning |
+|--------|---------|
+| `active` | Subscription is current. Organization is on `pro`. |
+| `trialing` | In a trial period. Organization is on `pro`. |
+| `incomplete` | Payment not yet confirmed. Organization is on `hobby`. |
+| `incomplete_expired` | Initial payment window expired. Organization is on `hobby`. |
+| `past_due` | Renewal payment failed. Organization is on `hobby`. |
+| `canceled` | Subscription was canceled. Organization is on `hobby`. |
+| `unpaid` | Renewal failed and retries exhausted. Organization is on `hobby`. |
+| `paused` | Subscription is paused. Organization is on `hobby`. |
+
+## Managing subscriptions
+
+Owners can manage the organization's subscription from **Settings → Billing**.
+
+- **Upgrade** — Initiates a Stripe Checkout session via `upgradeOrganizationToPro()` in `apps/web/lib/billing/api.ts`. After a successful checkout, the owner is redirected back to `/:organizationSlug/settings/billing`.
+- **Billing portal** — Opens the Stripe Customer Portal via `openOrganizationBillingPortal()`. The return URL is also `/:organizationSlug/settings/billing`.
+
+## Desktop and self-hosted without Stripe
+
+<Tabs>
+  <Tab title="Desktop app">
+    Billing is disabled. `isDesktopRuntime()` returns `true`, the Stripe plugin is not initialized, and all organizations are permanently on the `hobby` plan. No billing UI is shown.
+  </Tab>
+  <Tab title="Docker without Stripe">
+    If `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, or `STRIPE_PRO_MONTHLY_PRICE_ID` are not set, `isBillingEnabledForServer()` returns `false`. The Stripe plugin is not loaded. All organizations remain on `hobby`.
+  </Tab>
+  <Tab title="Docker with Stripe">
+    Full billing is active. Organizations can upgrade to `pro` and manage subscriptions through the Stripe-hosted Checkout and Customer Portal.
+  </Tab>
+</Tabs>

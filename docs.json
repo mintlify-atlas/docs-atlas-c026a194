@@ -1,122 +1,132 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Dory",
+  "theme": "sequoia",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#848c8e",
+    "light": "#cfd0d2",
+    "dark": "#11161e"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "https://media.brand.dev/2b01fe20-c04b-4a1d-a2f9-1d2789c50a7a.jpg",
+  "logo": {
+    "light": "https://media.brand.dev/5ffd6ce4-2434-4b4b-920a-f8cacac8b48b.svg",
+    "dark": "https://media.brand.dev/5ffd6ce4-2434-4b4b-920a-f8cacac8b48b.svg"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/dorylab/dory"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/dorylab/dory"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Overview",
+            "pages": ["introduction", "quickstart"]
+          },
+          {
+            "group": "Deployment",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "deployment/docker",
+              "deployment/desktop",
+              "deployment/environment-variables"
             ]
           },
           {
-            "group": "Customization",
+            "group": "AI Features",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "ai/sql-copilot",
+              "ai/database-chat",
+              "ai/providers",
+              "ai/schema-autocomplete"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Database Connections",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "connections/overview",
+              "connections/clickhouse",
+              "connections/postgresql",
+              "connections/mysql",
+              "connections/ssh-tunnel"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "SQL Editor",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "sql-editor/overview",
+              "sql-editor/saved-queries",
+              "sql-editor/visualizations"
+            ]
+          },
+          {
+            "group": "ClickHouse Deep Integration",
+            "pages": [
+              "clickhouse/monitoring",
+              "clickhouse/privileges"
+            ]
+          },
+          {
+            "group": "Administration",
+            "pages": [
+              "admin/organizations",
+              "admin/authentication",
+              "admin/billing"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Connections",
             "pages": [
-              "api-reference/introduction"
+              "api-reference/connections/list",
+              "api-reference/connections/create",
+              "api-reference/connections/test"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Query",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api-reference/query/execute",
+              "api-reference/query/sql-console"
+            ]
+          },
+          {
+            "group": "AI & Copilot",
+            "pages": [
+              "api-reference/copilot/action",
+              "api-reference/chat/session"
+            ]
+          },
+          {
+            "group": "Monitoring",
+            "pages": [
+              "api-reference/monitoring/summary",
+              "api-reference/monitoring/query-logs",
+              "api-reference/monitoring/slow-queries",
+              "api-reference/monitoring/timeline"
+            ]
+          },
+          {
+            "group": "Privileges",
+            "pages": [
+              "api-reference/privileges/users",
+              "api-reference/privileges/roles"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

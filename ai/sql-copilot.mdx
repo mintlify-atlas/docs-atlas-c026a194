@@ -1,0 +1,157 @@
+---
+title: "SQL Copilot"
+description: "AI-powered SQL generation, fixing, and explanation grounded in your real database schema."
+---
+
+<CardGroup cols={3}>
+  <Card title="Ask" icon="wand-magic-sparkles">
+    Generate SQL from natural language. Describe what you want in plain English and Copilot writes the query.
+  </Card>
+  <Card title="Action" icon="bolt">
+    Fix or rewrite the current SQL. Repair errors, improve clarity, optimize performance, or convert to aggregations.
+  </Card>
+  <Card title="Context" icon="book-open">
+    Explain query logic and field semantics. Understand what a query does and what each column means.
+  </Card>
+</CardGroup>
+
+<Note>
+  SQL Copilot requires an AI provider to be configured. If `DORY_AI_API_KEY` is not set, Copilot features are disabled gracefully and all other editor functionality remains available. See [AI providers](/ai/providers).
+</Note>
+
+## How it works
+
+SQL Copilot is grounded in your real database schema — not just text completion. When you invoke it, Dory builds a schema context from your connected database: it fetches the tables in the active database, retrieves column names, types, primary key flags, and comments (up to the configured sample limits), and passes that context directly to the model alongside your request.
+
+This means the model knows which tables actually exist, what columns they have, and what types they use. It will not invent columns or tables that are not in your schema.
+
+## Modes
+
+### Ask — generate SQL from natural language
+
+The **Ask** mode lets you describe a query in plain English. Copilot generates ready-to-run SQL based on your description and your connected schema.
+
+**Example:** You are connected to a ClickHouse database with an `events` table. You type:
+
+> Show me the top 10 users by event count in the last 7 days, grouped by user_id
+
+Copilot generates:
+
+```sql
+SELECT
+    user_id,
+    count() AS event_count
+FROM events
+WHERE event_time >= now() - INTERVAL 7 DAY
+GROUP BY user_id
+ORDER BY event_count DESC
+LIMIT 10
+```
+
+Because the schema context included the `events` table with its `user_id` and `event_time` columns, the generated SQL uses real column names.
+
+### Action — fix and rewrite SQL
+
+The **Action** mode operates on the SQL currently in your editor. It supports four intents:
+
+| Intent | What it does |
+|---|---|
+| `fix-sql-error` | Fixes a failed query with minimal changes. Returns the corrected SQL, an explanation, and a risk level (`low`, `medium`, or `high`). |
+| `rewrite-sql` | Rewrites for clarity and maintainability — cleaner JOINs, consistent aliases, reasonable CTEs — while keeping results equivalent. |
+| `optimize-performance` | Reduces full scans, repeated subqueries, and unnecessary computation without changing the returned rows. |
+| `to-aggregation` | Converts a detail query into a grouped/aggregated version suitable for charts and metrics. |
+
+All actions return a structured result:
+
+```json
+{
+  "title": "Fixed GROUP BY ambiguity",
+  "explanation": "Added missing column alias to resolve GROUP BY reference.",
+  "fixedSql": "SELECT ...",
+  "risk": "low"
+}
+```
+
+The `risk` field indicates Copilot's confidence: `low` means a safe, targeted fix; `high` means the model was uncertain and you should review carefully.
+
+#### Fixing an error
+
+When a query fails, Copilot receives the original SQL, the error message, the database dialect, and the real schema context. It makes the minimal change required for the query to run — it will not silently rewrite logic or introduce columns that do not exist.
+
+**Example:** A query fails with:
+
+```
+Code: 42. DB::Exception: Unknown identifier: created_ts
+```
+
+Copilot identifies that `created_ts` does not exist in the schema, finds the correct column name (`created_at`), and returns the corrected SQL with `risk: low`.
+
+#### Rewriting SQL
+
+The rewrite action focuses on readability while preserving result equivalence. Returned rows, columns, and ordering must match the original. Copilot will not add `EXPLAIN`/`ANALYZE`, generate DML, or introduce non-existent objects.
+
+#### Optimizing performance
+
+The optimize action targets inefficiencies: full table scans, repeated subqueries, and redundant computation. Results must remain equivalent. If the model is unsure whether an optimization is safe, it returns the original SQL with `risk: high`.
+
+### Context — explain query logic
+
+The **Context** mode provides plain-English explanations of query logic and field semantics. It is backed by the same schema context used for generation — columns are explained with their actual types, comments, and semantic tags derived from the schema.
+
+Dory pre-computes semantic tags and summaries for columns using the `schema.tag` and `schema.explain` prompt pipelines. These are cached and surfaced in the Copilot context panel.
+
+## Example workflows
+
+### Generating a complex join query
+
+<Steps>
+  <Step title="Open the Copilot panel">
+    In the SQL editor, click the Copilot button or use the keyboard shortcut to open the panel.
+  </Step>
+  <Step title="Describe your query">
+    Type a natural-language description. For example:
+
+    > Show daily active users for the last 30 days, joining the users table with the sessions table on user_id
+  </Step>
+  <Step title="Review and run">
+    Copilot generates SQL using the real column names from your connected `users` and `sessions` tables. Review the output, click **Apply** to insert it into the editor, then run it.
+  </Step>
+</Steps>
+
+### Fixing a failed query
+
+<Steps>
+  <Step title="Run the query">
+    Execute your SQL. If it returns an error, the error message is shown below the results pane.
+  </Step>
+  <Step title="Invoke Fix">
+    Click **Fix error** in the Copilot bar. Dory sends the SQL, error message, dialect, and schema context to the model.
+  </Step>
+  <Step title="Apply the fix">
+    Copilot returns corrected SQL with an explanation and a risk level. Click **Apply** to replace the current SQL, then re-run.
+  </Step>
+</Steps>
+
+### Explaining a query
+
+<Steps>
+  <Step title="Select the query">
+    Make sure the SQL you want to understand is in the active editor tab.
+  </Step>
+  <Step title="Open the Context panel">
+    Click **Explain** in the Copilot bar.
+  </Step>
+  <Step title="Read the explanation">
+    Copilot explains what the query does, what each clause means, and what the key fields represent — based on your actual schema metadata.
+  </Step>
+</Steps>
+
+## Requirements
+
+- A database connection must be active in the current tab for schema-grounded generation.
+- An AI provider must be configured via environment variables. See [AI providers](/ai/providers).
+- The `DORY_AI_MODEL` environment variable (or provider defaults) determines which model is used for each Copilot task.
+
+<Tip>
+  Copilot uses different model presets per task. For OpenAI, fast tasks like error fixing use `gpt-4o-mini` while chat and table summaries use `gpt-4o`. You can override the model for all tasks by setting `DORY_AI_MODEL`.
+</Tip>

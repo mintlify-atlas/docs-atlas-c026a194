@@ -1,0 +1,142 @@
+---
+title: "Copilot action"
+description: "Invoke the AI SQL copilot to generate, fix, or explain SQL."
+---
+
+<Note>
+  The copilot action endpoint requires an authenticated session. When the `USE_CLOUD_AI` environment variable is enabled, the request is transparently proxied to the configured cloud AI endpoint. When using a self-hosted AI provider, set `DORY_AI_PROVIDER` and `DORY_AI_MODEL` in your environment.
+</Note>
+
+Invokes the AI copilot to perform a targeted SQL action on a given SQL snippet. The endpoint supports four action intents and returns a structured result with a fixed SQL suggestion, explanation, and risk assessment.
+
+## Endpoint
+
+```
+POST /api/copilot/action
+```
+
+## Request body
+
+<ParamField body="intent" type="string" required>
+  The action to perform. One of:
+
+  | Value | Description |
+  |---|---|
+  | `fix-sql-error` | Fix a SQL error given the error message and context |
+  | `optimize-performance` | Rewrite the query for better performance |
+  | `rewrite-sql` | General SQL rewrite |
+  | `to-aggregation` | Convert the query to use aggregation functions |
+</ParamField>
+
+<ParamField body="input" type="object" required>
+  Context object describing the SQL and its environment.
+  <Expandable title="properties">
+    <ResponseField name="dialect" type="string" required>
+      The SQL dialect of the target database (e.g. `clickhouse`, `mysql`, `postgres`).
+    </ResponseField>
+    <ResponseField name="sql" type="string" required>
+      The SQL text to act on.
+    </ResponseField>
+    <ResponseField name="database" type="string">
+      The active database name for schema resolution context.
+    </ResponseField>
+    <ResponseField name="schemaContext" type="string">
+      Optional serialized schema context (table and column definitions) to improve AI accuracy.
+    </ResponseField>
+    <ResponseField name="error" type="object">
+      Error details to provide when using `fix-sql-error`.
+      <Expandable title="properties">
+        <ResponseField name="message" type="string" required>
+          The error message from the database driver.
+        </ResponseField>
+        <ResponseField name="code" type="string | number">
+          Optional driver error code.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="connectionId" type="string">
+      Optional connection ID for additional context resolution.
+    </ResponseField>
+    <ResponseField name="model" type="string">
+      Optional AI model name to use. Ignored when `USE_CLOUD_AI` is enabled.
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="model" type="string">
+  Top-level model override. Ignored when `USE_CLOUD_AI` is enabled.
+</ParamField>
+
+## Response
+
+Returns a JSON object — not a stream. The response is synchronous.
+
+<ResponseField name="title" type="string" required>
+  Short title describing the suggested fix or rewrite.
+</ResponseField>
+
+<ResponseField name="explanation" type="string" required>
+  Human-readable explanation of what was changed and why.
+</ResponseField>
+
+<ResponseField name="fixedSql" type="string" required>
+  The revised SQL text.
+</ResponseField>
+
+<ResponseField name="risk" type="string" required>
+  Risk assessment of applying the suggestion. One of `low`, `medium`, `high`.
+</ResponseField>
+
+## Error responses
+
+| Status | Code | Description |
+|---|---|---|
+| `400` | — | `intent` or `input` is missing from the request body |
+| `500` | `MISSING_AI_ENV` | AI provider environment variables are not configured |
+| `500` | `CLOUD_API_NOT_CONFIGURED` | Cloud AI mode is enabled but `DORY_CLOUD_API_URL` is not set |
+
+## Examples
+
+<CodeGroup>
+
+```bash Fix a SQL error
+curl -X POST https://your-dory-instance/api/copilot/action \
+  -H "Cookie: <session-cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "intent": "fix-sql-error",
+    "input": {
+      "dialect": "clickhouse",
+      "sql": "SELECT user_id, coutn(*) FROM events GROUP BY user_id",
+      "error": {
+        "message": "Unknown function coutn",
+        "code": 46
+      }
+    }
+  }'
+```
+
+```bash Optimize query
+curl -X POST https://your-dory-instance/api/copilot/action \
+  -H "Cookie: <session-cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "intent": "optimize-performance",
+    "input": {
+      "dialect": "clickhouse",
+      "sql": "SELECT * FROM events WHERE toDate(created_at) = today()",
+      "database": "analytics"
+    }
+  }'
+```
+
+</CodeGroup>
+
+```json 200
+{
+  "title": "Fix typo: coutn → count",
+  "explanation": "The function name `coutn` is a typo. ClickHouse uses `count()` for aggregate row counting.",
+  "fixedSql": "SELECT user_id, count(*) FROM events GROUP BY user_id",
+  "risk": "low"
+}
+```

@@ -1,0 +1,117 @@
+---
+title: "Saved queries"
+description: "Save, organize, and reuse your most important SQL queries."
+---
+
+Saved queries let you preserve SQL you write in the editor and access it across sessions. They are stored in the `saved_queries` table, scoped to your organization and the active connection.
+
+## Saving a query
+
+<Steps>
+  <Step title="Write or open a query">
+    Write SQL in any editor tab, or open an existing tab that already contains the query you want to save.
+  </Step>
+  <Step title="Save the query">
+    Open the saved queries sidebar and use the save action. Provide a title and, optionally, a description.
+  </Step>
+  <Step title="Confirm">
+    The query appears in the sidebar immediately. It is now available any time you are connected to the same connection.
+  </Step>
+</Steps>
+
+### Saved query fields
+
+A saved query record contains:
+
+| Field | Description |
+|---|---|
+| `title` | Required. The display name shown in the sidebar. |
+| `description` | Optional free-text description. |
+| `sqlText` | The full SQL body. |
+| `connectionId` | The connection this query belongs to. Queries are scoped per connection. |
+| `folderId` | Optional reference to a folder. `null` means the query sits at the root level. |
+| `position` | Integer used to order queries within a folder or at root. |
+| `tags` | Array of string tags (stored as `text[]`). |
+| `context` | JSONB metadata blob for additional context (defaults to `{}`). |
+| `archivedAt` | Set when a query is archived. Archived queries are hidden from the default list. |
+
+## Opening a saved query
+
+Click any saved query in the sidebar to load its SQL into the active editor tab. If you hover over a query entry, a preview card appears showing the full SQL text and the last-updated timestamp.
+
+## Renaming a query
+
+Hover the query entry and click the `⋯` menu, then choose **Rename**. A dialog opens with the current title pre-filled. Press **Enter** or click **Save** to confirm.
+
+## Organizing queries into folders
+
+### Creating a folder
+
+Click the folder-plus icon in the saved queries sidebar header. Enter a name in the dialog and confirm. The folder appears in the list.
+
+A folder record stores:
+
+| Field | Description |
+|---|---|
+| `name` | Display name of the folder. |
+| `position` | Integer controlling display order. |
+| `organizationId` | Organization scope. |
+| `userId` | Creator's user ID. |
+
+### Moving a query into a folder
+
+Hover the query, open the `⋯` menu, and choose **Move to folder**. Select the target folder from the submenu. To remove a query from a folder and return it to the root level, choose **Move to root**.
+
+### Reordering folders and queries
+
+Folders and queries are draggable. Drag a folder or a query item using the grip handle on the left side of each row. The new order is persisted immediately by calling `POST /api/sql-console/saved-query-folders/reorder` or `POST /api/sql-console/saved-queries/reorder`.
+
+### Deleting a folder
+
+Open the folder's context menu and choose **Delete**. When a folder is deleted, the queries it contained are moved back to the root level — they are not deleted.
+
+## Searching saved queries
+
+The search bar at the top of the saved queries sidebar filters queries by title or SQL content. Matching is case-insensitive substring search. When a search is active, the folder hierarchy is flattened and all matching queries are shown in a single flat list.
+
+## Sharing queries within an organization
+
+Saved queries are scoped to `organizationId` and `userId`. Queries you save are visible only to you within the organization. Sharing a query with colleagues requires them to import the SQL or save their own copy.
+
+<Note>
+  Organization-wide query sharing is on the roadmap. For now, queries are per-user within an organization.
+</Note>
+
+## Deleting a saved query
+
+Hover the query entry, open the `⋯` menu, and choose **Delete**. The deletion is immediate and permanent — there is no trash or undo.
+
+## Importing and exporting queries
+
+Dory does not currently have a dedicated import/export UI for saved queries. To migrate queries:
+
+- **Export** — Copy the SQL text from the hover preview or from the editor, and save it to a `.sql` file locally.
+- **Import** — Paste the SQL into an editor tab and save it as a new saved query.
+
+<Tip>
+  For bulk migration, you can query the `saved_queries` table directly through the SQL editor if you have database access to Dory's own PostgreSQL or PGLite store.
+</Tip>
+
+## API reference
+
+Saved queries are managed through the following REST endpoints:
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/sql-console/saved-queries` | List queries. Supports `?limit=50` and `?includeArchived=1`. |
+| `POST` | `/api/sql-console/saved-queries` | Create a query. Requires `title` and `sqlText`. |
+| `PATCH` | `/api/sql-console/saved-queries?id=<id>` | Update `title`, `description`, `sqlText`, `folderId`, `tags`, or `archivedAt`. |
+| `DELETE` | `/api/sql-console/saved-queries?id=<id>` | Delete a query permanently. |
+| `POST` | `/api/sql-console/saved-queries/reorder` | Persist a new order. Body: `{ folderId, orderedIds }`. |
+| `GET` | `/api/sql-console/saved-query-folders` | List folders. |
+| `POST` | `/api/sql-console/saved-query-folders` | Create a folder. Requires `name`. |
+| `PATCH` | `/api/sql-console/saved-query-folders?id=<id>` | Rename a folder. |
+| `DELETE` | `/api/sql-console/saved-query-folders?id=<id>` | Delete a folder. |
+| `POST` | `/api/sql-console/saved-query-folders/reorder` | Persist a new folder order. Body: `{ orderedIds }`. |
+
+All endpoints require the `X-Connection-ID` header to scope queries to the correct connection.

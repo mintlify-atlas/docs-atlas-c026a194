@@ -1,0 +1,147 @@
+---
+title: "SSH tunnels"
+description: "Connect to databases behind firewalls using SSH tunnels."
+---
+
+If your database is on a private network — behind a corporate firewall, in a private VPC, or accessible only from a bastion host — you can use an SSH tunnel to route the connection securely.
+
+## How it works
+
+When an SSH tunnel is enabled, Dory establishes an SSH session to a bastion host before opening the database connection. It then creates a local TCP forwarding server on `127.0.0.1` at a randomly assigned port. The database driver connects to that local port instead of connecting to the remote database host directly.
+
+```
+database driver → 127.0.0.1:<local-port> → SSH server → remote database host:<target-port>
+```
+
+The SSH layer is implemented in `apps/web/lib/connection/ssh/ssh-tunnel.ts` and is shared across all database drivers. It is a transport concern — it has no knowledge of SQL dialects, query formats, or driver-specific protocols.
+
+The tunnel lifecycle is tied to the datasource instance:
+- The tunnel is created once during datasource initialization.
+- All queries in the same session reuse the same tunnel.
+- When the datasource is closed (including idle timeout), the SSH tunnel is also closed.
+
+## When to use SSH tunnels
+
+- Your database is in a private VPC and is not reachable from the public internet.
+- Your organization requires all external database access to go through a bastion host.
+- Your database server only allows connections from specific internal IPs.
+
+<Note>
+  SSH tunnels are supported for all database types: ClickHouse, PostgreSQL, and MySQL.
+</Note>
+
+## Configuration
+
+Enable the SSH tunnel toggle on the connection form and fill in the following fields:
+
+<ParamField path="body.ssh.host" type="string" required>
+  Hostname or IP address of the SSH bastion server.
+</ParamField>
+
+<ParamField path="body.ssh.port" type="number" default="22">
+  SSH port on the bastion server. Defaults to `22`.
+</ParamField>
+
+<ParamField path="body.ssh.username" type="string">
+  SSH login username on the bastion server.
+</ParamField>
+
+<ParamField path="body.ssh.authMethod" type="string" default="password">
+  Authentication method. One of `password`, `private_key`, or `agent`.
+</ParamField>
+
+<ParamField path="body.ssh.password" type="string">
+  SSH password. Used when `authMethod` is `password`. Stored encrypted.
+</ParamField>
+
+<ParamField path="body.ssh.privateKey" type="string">
+  PEM-encoded private key. Used when `authMethod` is `private_key`. Stored encrypted.
+</ParamField>
+
+<ParamField path="body.ssh.passphrase" type="string">
+  Passphrase for the private key, if the key is passphrase-protected. Stored encrypted.
+</ParamField>
+
+## SSH key authentication
+
+To authenticate with a private key:
+
+<Steps>
+  <Step title="Set the auth method">
+    Set **Auth method** to `private_key`.
+  </Step>
+  <Step title="Paste your private key">
+    Paste the full PEM-encoded private key into the **Private key** field. This includes the `-----BEGIN ... PRIVATE KEY-----` header and footer.
+  </Step>
+  <Step title="Add a passphrase if needed">
+    If your key is protected by a passphrase, enter it in the **Passphrase** field. Leave it empty for unprotected keys.
+  </Step>
+</Steps>
+
+<Tip>
+  Generate a dedicated SSH key pair for Dory rather than reusing your personal key. Add only the public key to the bastion host's `~/.ssh/authorized_keys`.
+</Tip>
+
+## SSH agent authentication
+
+Set **Auth method** to `agent` to use the SSH agent running on the server where Dory is deployed. Dory reads the agent socket from the `SSH_AUTH_SOCK` environment variable.
+
+<Warning>
+  SSH agent authentication requires `SSH_AUTH_SOCK` to be set in the Dory server environment. This method is most practical for the Desktop app where Dory runs on your local machine. In Docker deployments, mounting the agent socket requires additional configuration.
+</Warning>
+
+## SSH secrets storage
+
+SSH credentials are stored separately from connection credentials in the `connection_ssh` table:
+
+```typescript
+// from apps/web/lib/database/postgres/schemas/connections.ts
+export const connectionSsh = pgTable('connection_ssh', {
+    connectionId: text('connection_id').primaryKey(),
+    enabled: boolean('enabled').notNull().default(false),
+    host: text('host'),
+    port: integer('port'),
+    username: text('username'),
+    authMethod: text('auth_method'), // password / private_key / agent
+    passwordEncrypted: text('password_encrypted'),
+    privateKeyEncrypted: text('private_key_encrypted'),
+    passphraseEncrypted: text('passphrase_encrypted'),
+});
+```
+
+When testing a connection, the service resolves SSH secrets from storage if the test payload does not include them (for example, when re-testing an existing connection without re-entering the password).
+
+## Security considerations
+
+- SSH passwords, private keys, and passphrases are stored encrypted. The application layer handles encryption and decryption at runtime.
+- Private keys are never sent to the client after saving. When you re-open a connection for editing, the key field appears empty. You only need to re-enter it if you want to change it.
+- The SSH tunnel binds to `127.0.0.1` (loopback only). The forwarding server is not exposed on any external interface.
+- The SSH connection is established server-side (inside the Dory process), not from your browser.
+- SSH connection setup has a 15-second ready timeout (`readyTimeout: 15_000`). If the bastion is unreachable, the tunnel creation fails and an error is returned.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="SSH connection timed out">
+    - Verify the bastion host is reachable from the Dory server on the configured SSH port.
+    - Check that the SSH port (default 22) is open in the bastion's security group or firewall rules.
+    - Confirm the SSH username is correct for the bastion host.
+  </Accordion>
+  <Accordion title="Authentication failed">
+    - For password auth: confirm the password is correct and the user is allowed to log in.
+    - For private key auth: confirm the public key is in `~/.ssh/authorized_keys` on the bastion, and that you have pasted the correct private key.
+    - For agent auth: confirm `SSH_AUTH_SOCK` is set in the Dory server environment and the agent has the key loaded.
+  </Accordion>
+  <Accordion title="Missing private key error">
+    If you see an error about a missing private key when testing an existing connection, re-enter the private key in the connection SSH settings. The key is not stored in the frontend after initial save.
+  </Accordion>
+  <Accordion title="Database connection refused through the tunnel">
+    The SSH tunnel is active but the database is not reachable from the bastion host:
+    - Confirm the database host and port are accessible from the bastion server (not from the Dory server).
+    - Check that the database firewall allows connections from the bastion's internal IP.
+    - Try connecting manually: `ssh user@bastion -L 5432:db-host:5432` and then connecting locally to confirm reachability.
+  </Accordion>
+  <Accordion title="Tunnel closes unexpectedly">
+    The SSH session may be terminated by the bastion's `ClientAliveInterval` or `ServerAliveInterval` settings. If queries are failing mid-session, the Dory datasource pool will detect the broken instance on the next ping and reconnect automatically.
+  </Accordion>
+</AccordionGroup>

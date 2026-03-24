@@ -1,0 +1,117 @@
+---
+title: "Monitoring summary"
+description: "Get real-time ClickHouse monitoring summary metrics."
+---
+
+<Note>
+  All monitoring endpoints use `POST` and require the `x-connection-id` header pointing to a ClickHouse connection with `queryInsights` capability. The connection pool must be active before calling these endpoints.
+</Note>
+
+Returns aggregate metrics for the selected time window: total queries, slow queries, error queries, and active users. Use this endpoint to populate dashboard summary cards.
+
+## Endpoint
+
+```
+POST /api/monitoring/summary
+```
+
+## Headers
+
+<ParamField header="x-connection-id" type="string" required>
+  ID of the active ClickHouse connection.
+</ParamField>
+
+## Request body
+
+<ParamField body="filters" type="object">
+  Query insight filters. If omitted, defaults are applied.
+  <Expandable title="properties">
+    <ResponseField name="timeRange" type="string" default="1h">
+      Time window. One of `1h`, `6h`, `24h`, `7d`.
+    </ResponseField>
+    <ResponseField name="user" type="string" default="all">
+      Filter by ClickHouse username. Use `all` for no filter.
+    </ResponseField>
+    <ResponseField name="database" type="string" default="all">
+      Filter by database name. Use `all` for no filter.
+    </ResponseField>
+    <ResponseField name="queryType" type="string" default="all">
+      Filter by query type. One of `all`, `select`, `insert`, `ddl`, `other`.
+    </ResponseField>
+    <ResponseField name="minDurationMs" type="number" default="0">
+      Minimum query duration in milliseconds to include.
+    </ResponseField>
+    <ResponseField name="search" type="string" default="">
+      Free-text search string applied to query text.
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+## Response
+
+<ResponseField name="ok" type="boolean" required>
+  `true` on success.
+</ResponseField>
+
+<ResponseField name="data" type="object" required>
+  Summary metrics object. The exact fields are returned by the ClickHouse `queryInsights.summary()` method and vary by server version, but typically include:
+  <Expandable title="common fields">
+    <ResponseField name="totalQueries" type="number">
+      Total number of queries in the selected time window.
+    </ResponseField>
+    <ResponseField name="slowQueries" type="number">
+      Number of queries that exceeded the slow query threshold.
+    </ResponseField>
+    <ResponseField name="errorQueries" type="number">
+      Number of queries that resulted in an error.
+    </ResponseField>
+    <ResponseField name="activeUsers" type="number">
+      Number of distinct users who executed queries.
+    </ResponseField>
+    <ResponseField name="avgDurationMs" type="number">
+      Average query duration in milliseconds.
+    </ResponseField>
+    <ResponseField name="p99DurationMs" type="number">
+      99th percentile query duration in milliseconds.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+```bash
+curl -X POST https://your-dory-instance/api/monitoring/summary \
+  -H "Cookie: <session-cookie>" \
+  -H "x-connection-id: conn_ch123" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filters": {
+      "timeRange": "24h",
+      "queryType": "select"
+    }
+  }'
+```
+
+```json 200
+{
+  "ok": true,
+  "data": {
+    "totalQueries": 8420,
+    "slowQueries": 143,
+    "errorQueries": 17,
+    "activeUsers": 12,
+    "avgDurationMs": 234,
+    "p99DurationMs": 4200
+  }
+}
+```
+
+```json 500 error
+{
+  "ok": false,
+  "error": {
+    "code": "DATABASE_ERROR",
+    "message": "Query failed."
+  }
+}
+```

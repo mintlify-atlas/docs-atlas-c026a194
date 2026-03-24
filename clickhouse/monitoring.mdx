@@ -1,0 +1,141 @@
+---
+title: "ClickHouse monitoring"
+description: "Real-time query metrics, latency trends, and multi-dimensional filtering for ClickHouse."
+---
+
+<Note>
+  Monitoring is available only for ClickHouse connections. If you open this section on a PostgreSQL or MySQL connection, Dory redirects you to the SQL console automatically.
+</Note>
+
+The monitoring section gives you a live view of query activity on your ClickHouse server. It reads directly from `system.query_log` and requires no additional configuration or agents.
+
+## Navigating to monitoring
+
+Open a ClickHouse connection, then click **Monitoring** in the sidebar. You land on the **Overview** tab. Four tabs are available across the top:
+
+| Tab | What it shows |
+|-----|---------------|
+| **Overview** | Summary metrics, latency and throughput trend charts, recent queries |
+| **Query logs** | Full paginated log of all executed queries |
+| **Slow queries** | Queries that exceeded the slow-query threshold |
+| **Error queries** | Queries that resulted in an exception |
+
+## Overview tab
+
+### Summary cards
+
+Four metric cards appear at the top of the overview:
+
+<CardGroup cols={4}>
+  <Card title="Total queries" icon="database">
+    Count of all executed queries in the selected time range. Click to open the Query logs tab.
+  </Card>
+  <Card title="Slow queries" icon="clock">
+    Count of queries that exceeded the slow-query threshold. Click to open the Slow queries tab.
+  </Card>
+  <Card title="Error queries" icon="triangle-exclamation">
+    Count of queries where an exception occurred. Click to open the Error queries tab.
+  </Card>
+  <Card title="Active users" icon="users">
+    Distinct users who ran at least one query in the time range. Click to open the Query logs tab.
+  </Card>
+</CardGroup>
+
+Each card is clickable and navigates directly to the relevant detail tab.
+
+### Trend charts
+
+Below the summary cards, four area charts show how activity has changed over time:
+
+**Query latency** — P50 and P95 duration in milliseconds, plotted over time. A toggle lets you show both percentiles together or each individually. P95 reflects the worst-performing tail of your queries.
+
+**Query throughput** — Queries per minute (QPM), calculated as `count() * 60 / bucketSeconds` per time bucket.
+
+**Error count** — Number of exception-producing queries per time bucket.
+
+**Slow query count** — Number of queries exceeding the slow threshold per time bucket.
+
+The time axis uses buckets sized according to the selected time range:
+
+| Time range | Bucket size |
+|-----------|-------------|
+| 1 hour | 1 minute |
+| 6 hours | 10 minutes |
+| 24 hours | 30 minutes |
+| 7 days | 6 hours |
+
+### Recent queries
+
+A compact table below the charts shows the most recent queries (up to 8 by default, max 50). Each row includes the query ID, timestamp, user, database, duration, rows read, bytes read, and a preview of the SQL text.
+
+Click **View all** to navigate to the full Query logs tab.
+
+## Filtering
+
+A filter bar persists across all tabs. Changing any filter invalidates all cached data and triggers a fresh fetch.
+
+| Filter | Options | Default |
+|--------|---------|----------|
+| **User** | Any ClickHouse user or `all` | `all` |
+| **Database** | Any database on the connection or `all` | `all` |
+| **Query type** | `all`, `SELECT`, `INSERT`, `DDL`, `Other` | `all` |
+| **Duration threshold** | Minimum query duration in milliseconds | `0` ms |
+| **Time range** | `1h`, `6h`, `24h`, `7d` | `1h` |
+| **Search** | Free-text search across query SQL, user, address, and database | — |
+
+The **Overview** and **Slow queries** tabs also expose a **threshold mode** toggle:
+
+- **Dynamic** — the slow-query threshold is set automatically to the P95 duration calculated from the current data. This means "slow" adjusts to your actual workload.
+- **Fixed** — you supply a minimum duration in milliseconds manually.
+
+Click **Apply** to commit filter changes. Click **Reset** to restore all filters to their defaults.
+
+## Query logs tab
+
+The Query logs tab shows every executed query (`QueryFinish` and `ExceptionWhileProcessing` events from `system.query_log`), sorted by event time descending.
+
+Columns displayed:
+
+| Column | Description |
+|--------|-------------|
+| Query ID | Unique query identifier |
+| Time | Formatted event timestamp (`YYYY-MM-DD HH:mm:SS`) |
+| Duration | Query duration in milliseconds, colour-coded by severity |
+| User | ClickHouse user who ran the query |
+| Database | `current_database` at query time |
+| Read rows / bytes | Rows scanned and bytes read |
+| Written bytes | Bytes written (if any) |
+| Memory usage | Peak memory usage |
+| SQL | Truncated query text |
+
+Duration colour coding:
+
+- **Red** — 1,000 ms or more
+- **Amber** — 200–999 ms
+- **Muted** — under 200 ms
+
+Rows that contain an exception are highlighted with a subtle red background.
+
+Pagination options: 10, 20, 50, 100, or 200 rows per page (default 50).
+
+## Slow queries tab
+
+The Slow queries tab filters to only queries that exceed the current slow-query threshold. Results are sorted by duration descending so the worst offenders appear first.
+
+The threshold is enforced server-side. In dynamic mode, the backend computes the P95 duration for the current filter window and uses that as the minimum. In fixed mode, the value you enter in the filter bar is used directly. A hard floor of 100 ms is always applied — queries shorter than 100 ms are never classified as slow.
+
+The table columns are identical to Query logs, with the same duration colour coding and pagination options.
+
+## Error queries tab
+
+The Error queries tab filters to queries where `exception != ''`. Results are sorted by event time descending.
+
+An additional **Error message** column appears at the end of the table. Long error messages are truncated with a tooltip on hover that shows the full text.
+
+All other columns and pagination behaviour match the Query logs tab.
+
+## Data source
+
+All monitoring data is read from `system.query_log` using ClickHouse parameterised queries. No data is stored in Dory's own database. The monitoring section queries the ClickHouse connection directly on each fetch.
+
+The `queryInsights` capability is implemented in `apps/web/lib/connection/drivers/clickhouse/capabilities/insights.ts` and exposed through the monitoring API routes under `apps/web/app/api/monitoring/`.

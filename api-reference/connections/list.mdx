@@ -1,0 +1,175 @@
+---
+title: "List connections"
+description: "Retrieve all database connections for an organization."
+---
+
+<Note>
+  All connection endpoints require an authenticated session scoped to an organization. Requests without a valid session return `401 Unauthorized`.
+</Note>
+
+Returns all non-deleted connections belonging to the current organization. Pass an optional `id` query parameter to fetch a single connection by ID.
+
+## Endpoints
+
+```
+GET /api/connection
+GET /api/connection?id={connectionId}
+```
+
+## Query parameters
+
+<ParamField query="id" type="string">
+  When provided, returns a single connection record matching this ID instead of the full list. Returns `404` if not found within the organization.
+</ParamField>
+
+## Response
+
+All responses follow the envelope format `{ ok: boolean, data: ... }`.
+
+### List response
+
+<ResponseField name="ok" type="boolean" required>
+  `true` when the request succeeded.
+</ResponseField>
+
+<ResponseField name="data" type="object[]" required>
+  Array of connection records.
+  <Expandable title="Connection object">
+    <ResponseField name="id" type="string" required>
+      Unique connection identifier.
+    </ResponseField>
+    <ResponseField name="name" type="string" required>
+      Human-readable connection name. Unique within the organization (excluding soft-deleted records).
+    </ResponseField>
+    <ResponseField name="type" type="string" required>
+      Connection type. One of `clickhouse`, `doris`, `mariadb`, `mysql`, `postgres`.
+    </ResponseField>
+    <ResponseField name="engine" type="string" required>
+      Database engine label.
+    </ResponseField>
+    <ResponseField name="host" type="string" required>
+      Database host.
+    </ResponseField>
+    <ResponseField name="port" type="number" required>
+      Database port (1–65535).
+    </ResponseField>
+    <ResponseField name="httpPort" type="number">
+      Optional HTTP port (1–65535). Used by some drivers such as ClickHouse.
+    </ResponseField>
+    <ResponseField name="database" type="string">
+      Default database name.
+    </ResponseField>
+    <ResponseField name="description" type="string">
+      Optional description.
+    </ResponseField>
+    <ResponseField name="status" type="string" required>
+      Connection status. One of `draft`, `ready`, `error`, `disabled`.
+    </ResponseField>
+    <ResponseField name="environment" type="string">
+      Environment label, e.g. `dev`, `staging`, `prod`, `personal`, `shared`.
+    </ResponseField>
+    <ResponseField name="tags" type="string" required>
+      Comma-separated tag string.
+    </ResponseField>
+    <ResponseField name="options" type="string" required>
+      JSON-serialized extended configuration object.
+    </ResponseField>
+    <ResponseField name="lastCheckStatus" type="string" required>
+      Latest connectivity check status. One of `unknown`, `ok`, `error`.
+    </ResponseField>
+    <ResponseField name="lastCheckAt" type="string">
+      ISO 8601 timestamp of the last connectivity check.
+    </ResponseField>
+    <ResponseField name="lastCheckLatencyMs" type="number">
+      Latency in milliseconds recorded at the last connectivity check.
+    </ResponseField>
+    <ResponseField name="lastCheckError" type="string">
+      Error message from the last failed connectivity check.
+    </ResponseField>
+    <ResponseField name="syncStatus" type="string" required>
+      Sync state. One of `local_only`, `queued_create`, `queued_update`, `queued_delete`, `syncing_create`, `syncing_update`, `syncing_delete`, `synced`, `failed`, `conflict`.
+    </ResponseField>
+    <ResponseField name="createdByUserId" type="string">
+      ID of the user who created this connection.
+    </ResponseField>
+    <ResponseField name="organizationId" type="string" required>
+      Organization this connection belongs to.
+    </ResponseField>
+    <ResponseField name="createdAt" type="string" required>
+      ISO 8601 creation timestamp.
+    </ResponseField>
+    <ResponseField name="updatedAt" type="string" required>
+      ISO 8601 last-update timestamp.
+    </ResponseField>
+    <ResponseField name="lastUsedAt" type="string">
+      ISO 8601 timestamp when the connection was last used.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Single connection response
+
+When `id` is provided, `data` is a single connection object with the same fields as above.
+
+## Examples
+
+<CodeGroup>
+
+```bash List all connections
+curl -X GET https://your-dory-instance/api/connection \
+  -H "Cookie: <session-cookie>"
+```
+
+```bash Get connection by ID
+curl -X GET "https://your-dory-instance/api/connection?id=conn_abc123" \
+  -H "Cookie: <session-cookie>"
+```
+
+</CodeGroup>
+
+<CodeGroup>
+
+```json 200 list
+{
+  "ok": true,
+  "data": [
+    {
+      "id": "conn_abc123",
+      "name": "Production ClickHouse",
+      "type": "clickhouse",
+      "engine": "clickhouse",
+      "host": "ch.example.com",
+      "port": 9000,
+      "httpPort": 8123,
+      "database": "analytics",
+      "description": null,
+      "status": "ready",
+      "environment": "prod",
+      "tags": "analytics,reporting",
+      "options": "{}",
+      "lastCheckStatus": "ok",
+      "lastCheckAt": "2024-06-01T10:00:00.000Z",
+      "lastCheckLatencyMs": 42,
+      "lastCheckError": null,
+      "syncStatus": "synced",
+      "createdByUserId": "usr_xyz",
+      "organizationId": "org_123",
+      "createdAt": "2024-01-15T08:00:00.000Z",
+      "updatedAt": "2024-06-01T10:00:00.000Z",
+      "lastUsedAt": "2024-06-01T09:55:00.000Z"
+    }
+  ]
+}
+```
+
+```json 404 not found
+{
+  "ok": false,
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Connection not found."
+  }
+}
+```
+
+</CodeGroup>

@@ -1,0 +1,112 @@
+---
+title: "Database connections"
+description: "Connect Dory to your databases — ClickHouse, PostgreSQL, MySQL, and more."
+---
+
+Dory connects to external databases through a connection layer that manages credentials, pooling, and SSH tunneling. Each connection is scoped to an organization and can have multiple identities (database users) attached to it.
+
+## Supported databases
+
+<CardGroup cols={3}>
+  <Card title="ClickHouse" icon="database" href="/connections/clickhouse">
+    Deeply integrated. Full monitoring, privilege management, query insights, and table inspection.
+  </Card>
+  <Card title="PostgreSQL" icon="elephant" href="/connections/postgresql">
+    Beta. SQL editing, schema browsing, and AI copilot support.
+  </Card>
+  <Card title="MySQL" icon="dolphin" href="/connections/mysql">
+    Beta. SQL editing, schema browsing, and AI copilot support.
+  </Card>
+</CardGroup>
+
+| Database   | Status            | Notes                                                          |
+|------------|-------------------|----------------------------------------------------------------|
+| ClickHouse | Deeply integrated | Monitoring, privileges, query insights, table info             |
+| PostgreSQL | Beta              | Core SQL features; advanced capabilities in development        |
+| MySQL      | Beta              | Core SQL features; advanced capabilities in development        |
+| MariaDB    | Beta              | Shares the MySQL driver path                                   |
+| Doris      | Experimental      | Schema registered; driver in development                       |
+
+## Adding a connection
+
+<Steps>
+  <Step title="Open connection settings">
+    Navigate to **Settings → Connections** and click **New connection**.
+  </Step>
+  <Step title="Select the database type">
+    Choose ClickHouse, PostgreSQL, or MySQL. The form adapts to the selected type.
+  </Step>
+  <Step title="Enter connection details">
+    Fill in the host, port, and any protocol-specific options (for example, HTTP port for ClickHouse or SSL mode for PostgreSQL).
+  </Step>
+  <Step title="Add an identity">
+    An identity stores a database username and its encrypted password. Each connection requires at least one identity. You can mark one identity as default — it is used when no specific identity is requested.
+  </Step>
+  <Step title="(Optional) Configure an SSH tunnel">
+    If the database is behind a firewall or private network, enable the SSH tunnel and provide the bastion host details. See [SSH tunnels](/connections/ssh-tunnel).
+  </Step>
+  <Step title="Test the connection">
+    Click **Test connection** before saving. Dory opens a temporary connection, runs a `ping`, and reports latency and the server version. The test result is recorded on the connection record.
+  </Step>
+  <Step title="Save">
+    Once the test passes, save the connection. Its status transitions from `draft` to `ready`.
+  </Step>
+</Steps>
+
+## Connection identity
+
+A connection stores the host and protocol details separately from credentials. Credentials live in a related `connection_identities` record.
+
+```
+connection
+  id, host, port, type, options, status, ...
+  └── connection_identity (one or more)
+        id, username, database, is_default, options, ...
+        └── connection_identity_secrets
+              password_encrypted
+```
+
+This separation lets you attach multiple database users to the same host — for example, a read-only analyst identity and an admin identity pointing at the same ClickHouse cluster.
+
+When a query runs, Dory selects the identity to use. If no identity id is passed, it picks the one where `isDefault = true`, or falls back to the first available identity.
+
+<Note>
+  Passwords are stored encrypted. The connection layer decrypts them at runtime before building the driver config.
+</Note>
+
+## Connection pooling
+
+Dory maintains a server-side datasource pool keyed by connection ID. The pool stores one live datasource instance per connection.
+
+- When a request arrives, the pool checks whether a healthy instance already exists.
+- If the instance exists, Dory pings it (5-second timeout by default) to confirm it is reachable before reusing it.
+- If the ping fails, the pool automatically closes the stale instance and creates a fresh one.
+- Idle instances are closed after **5 minutes** of inactivity to avoid holding open connections unnecessarily.
+
+This behavior is implemented in `apps/web/lib/connection/pool-store.ts`. The idle timeout and ping timeout can be overridden with the `DATASOURCE_PING_TIMEOUT_MS` and `DATASOURCE_CLOSE_TIMEOUT_MS` environment variables.
+
+## Testing connections before saving
+
+The **Test connection** button posts to `POST /api/connection/test`. The test service:
+
+1. Resolves the identity password from storage (or uses the value typed in the form for unsaved connections).
+2. Resolves SSH secrets if an SSH tunnel is configured.
+3. Builds a temporary `BaseConfig` from the form payload.
+4. Creates a short-lived datasource instance and calls `ping()`.
+5. Records the outcome — status, latency in milliseconds, and any error — back onto the connection record.
+6. Closes the temporary instance.
+
+The ping result is displayed in the UI immediately and persisted as `lastCheckStatus`, `lastCheckAt`, and `lastCheckLatencyMs` on the connection row.
+
+## Managing multiple connections
+
+Connections are scoped to an organization. All members of an organization can use the connections defined in it.
+
+- **Status** — Each connection has a `status` field: `draft`, `ready`, `error`, or `disabled`.
+- **Environments** — You can tag connections with an environment label such as `prod`, `staging`, or `dev` to keep them organized.
+- **Tags** — Free-form comma-separated tags are stored on the connection for filtering.
+- **Last used** — `lastUsedAt` is updated when a connection is actively queried, making it easy to identify unused connections.
+
+<Tip>
+  Use descriptive connection names. Names must be unique within an organization (excluding soft-deleted connections).
+</Tip>

@@ -1,0 +1,114 @@
+---
+title: "Slow queries"
+description: "Retrieve slow query analysis data from ClickHouse."
+---
+
+<Note>
+  Requires the `x-connection-id` header pointing to a ClickHouse connection with `queryInsights` capability.
+</Note>
+
+Returns paginated query log entries filtered to slow queries — those exceeding a threshold determined by the `minDurationMs` filter. Use this endpoint to identify and analyze performance bottlenecks.
+
+## Endpoint
+
+```
+POST /api/monitoring/slow-queries
+```
+
+## Headers
+
+<ParamField header="x-connection-id" type="string" required>
+  ID of the active ClickHouse connection.
+</ParamField>
+
+## Request body
+
+<ParamField body="pageIndex" type="number" default="0">
+  Zero-based page index.
+</ParamField>
+
+<ParamField body="pageSize" type="number" default="10">
+  Number of rows per page.
+</ParamField>
+
+<ParamField body="filters" type="object">
+  Query insight filters. Set `minDurationMs` to control the slow query threshold.
+  <Expandable title="properties">
+    <ResponseField name="timeRange" type="string" default="1h">
+      Time window. One of `1h`, `6h`, `24h`, `7d`.
+    </ResponseField>
+    <ResponseField name="user" type="string" default="all">
+      Filter by ClickHouse username.
+    </ResponseField>
+    <ResponseField name="database" type="string" default="all">
+      Filter by database name.
+    </ResponseField>
+    <ResponseField name="queryType" type="string" default="all">
+      Filter by query type. One of `all`, `select`, `insert`, `ddl`, `other`.
+    </ResponseField>
+    <ResponseField name="minDurationMs" type="number" default="0">
+      Minimum query duration in milliseconds. Use this to set the slow query threshold (e.g. `1000` for queries over 1 second).
+    </ResponseField>
+    <ResponseField name="search" type="string" default="">
+      Free-text search string.
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+## Response
+
+<ResponseField name="ok" type="boolean" required>
+  `true` on success.
+</ResponseField>
+
+<ResponseField name="data" type="object" required>
+  <Expandable title="properties" defaultOpen>
+    <ResponseField name="rows" type="object[]" required>
+      Page of slow query log entries. Fields match those from [Query logs](/api-reference/monitoring/query-logs), sorted by duration descending.
+    </ResponseField>
+    <ResponseField name="total" type="number" required>
+      Total number of matching slow query entries.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+```bash
+curl -X POST https://your-dory-instance/api/monitoring/slow-queries \
+  -H "Cookie: <session-cookie>" \
+  -H "x-connection-id: conn_ch123" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "pageIndex": 0,
+    "pageSize": 10,
+    "filters": {
+      "timeRange": "24h",
+      "minDurationMs": 2000
+    }
+  }'
+```
+
+```json 200
+{
+  "ok": true,
+  "data": {
+    "rows": [
+      {
+        "query_id": "slow_001",
+        "query": "SELECT * FROM events JOIN sessions USING (session_id)",
+        "user": "default",
+        "query_start_time": "2024-06-01T08:30:00.000Z",
+        "query_duration_ms": 18400,
+        "read_rows": 120000000,
+        "read_bytes": 960000000,
+        "result_rows": 5000000,
+        "exception": "",
+        "databases": ["analytics"],
+        "type": "QueryFinish"
+      }
+    ],
+    "total": 43
+  }
+}
+```

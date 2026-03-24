@@ -1,0 +1,148 @@
+---
+title: "ClickHouse"
+description: "Connect Dory to ClickHouse — the deep integration database with monitoring and privilege management."
+---
+
+ClickHouse is the primary integration database in Dory. In addition to SQL editing and AI copilot features, ClickHouse connections unlock query monitoring, privilege management, query insights, and table inspection.
+
+## Connection parameters
+
+<ParamField path="body.host" type="string" required>
+  Hostname or IP address of the ClickHouse server. You can include a full URL with scheme (e.g. `https://my-cluster.clickhouse.cloud`) — the driver extracts the protocol and host automatically.
+</ParamField>
+
+<ParamField path="body.port" type="number">
+  HTTP port for the ClickHouse HTTP interface. Defaults to `8123` (plain HTTP) or `8443` (HTTPS/TLS). Set this if your server listens on a non-standard port.
+</ParamField>
+
+<ParamField path="body.database" type="string">
+  Default database to use. Defaults to `default` if not specified. Individual queries can target other databases by creating a temporary client scoped to that database.
+</ParamField>
+
+<ParamField path="body.username" type="string" required>
+  ClickHouse username. Stored as part of the connection identity, not the connection itself. Defaults to `default` in the driver if left blank.
+</ParamField>
+
+<ParamField path="body.password" type="string">
+  ClickHouse password. Stored encrypted in `connection_identity_secrets`.
+</ParamField>
+
+### Advanced options
+
+Pass these as JSON in the **Options** field:
+
+| Option | Type | Description |
+|---|---|---|
+| `ssl` | boolean | Enable TLS. Equivalent to using an `https://` host URL. |
+| `useSSL` | boolean | Alias for `ssl`. |
+| `protocol` | string | Set to `"https"` to force TLS regardless of host scheme. |
+| `request_timeout` | number | Query timeout in milliseconds. Minimum 1000 ms. |
+| `clickhouse_settings` | object | Arbitrary ClickHouse server settings forwarded with every query (e.g. `{"max_execution_time": 30}`). |
+
+## Native protocol vs HTTP protocol
+
+Dory uses the ClickHouse **HTTP interface** — not the native TCP protocol. The `@clickhouse/client` library communicates over HTTP or HTTPS.
+
+- Default plain HTTP port: **8123**
+- Default HTTPS port: **8443**
+
+The driver builds the connection URL from your host and port:
+
+```typescript
+// from apps/web/lib/connection/drivers/clickhouse/clickhouse-driver.ts
+function buildUrl(host: string, httpPort?: number | string, useTls?: boolean): string {
+    const preferredScheme = useTls ? 'https' : 'http';
+    // strips any existing scheme from host, then applies preferredScheme
+    // applies httpPort if provided, otherwise falls back to 8443 or 8123
+}
+```
+
+If your host already contains a scheme (`https://my-cluster`), the driver honours it and enforces the corresponding TLS setting.
+
+<Note>
+  The native TCP port (default 9000) is not used. Always point Dory at the HTTP interface port.
+</Note>
+
+## SSL/TLS configuration
+
+Enable TLS in any of three ways:
+
+1. **Prefix the host with `https://`** — `https://my-cluster.example.com`
+2. **Set `ssl: true` in options** — `{"ssl": true}`
+3. **Set `protocol: "https"` in options** — `{"protocol": "https"}`
+
+When TLS is enabled and no port is specified, the driver defaults to port **8443**.
+
+<Warning>
+  The driver does not currently validate TLS certificates. All HTTPS connections accept self-signed certificates. Do not rely on this for certificate pinning.
+</Warning>
+
+## ClickHouse Cloud
+
+<Tabs>
+  <Tab title="ClickHouse Cloud">
+    ClickHouse Cloud endpoints expose HTTPS on port 8443.
+
+    | Field | Value |
+    |---|---|
+    | Host | `<instance-id>.<region>.aws.clickhouse.cloud` (or your cloud URL) |
+    | Port | `8443` |
+    | SSL | Enabled (use `https://` prefix or set `ssl: true`) |
+    | Username | Your ClickHouse Cloud username |
+    | Password | Your ClickHouse Cloud service password |
+
+    <Tip>
+      Paste your full ClickHouse Cloud connection URL directly into the **Host** field. The driver parses it and extracts the scheme, host, and port.
+    </Tip>
+  </Tab>
+  <Tab title="Self-hosted">
+    For a self-hosted ClickHouse server running with default settings:
+
+    | Field | Value |
+    |---|---|
+    | Host | IP address or hostname of the server |
+    | Port | `8123` (HTTP) or `8443` (HTTPS) |
+    | SSL | Enable if your server is configured with TLS |
+    | Username | `default` (or a custom user) |
+    | Password | Empty for `default`, or your configured password |
+
+    If the server runs on a private network, use an [SSH tunnel](/connections/ssh-tunnel).
+  </Tab>
+</Tabs>
+
+## Connection string format
+
+Dory does not have a dedicated connection string input, but you can place a full URL in the **Host** field. The driver accepts:
+
+```
+http://hostname:8123
+https://hostname:8443
+https://user:password@hostname:8443
+```
+
+When a URL is parsed, values extracted from it (port, user, password) are merged with the form fields. Explicit form fields take precedence.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Connection refused or timeout">
+    - Confirm the HTTP port (8123 or 8443) is open and not blocked by a firewall.
+    - Check that the ClickHouse server has `listen_host` configured to accept connections from your Dory host.
+    - If the server is on a private network, configure an [SSH tunnel](/connections/ssh-tunnel).
+  </Accordion>
+  <Accordion title="Authentication failure">
+    - Verify the username and password in the connection identity.
+    - Check that the user exists in ClickHouse: `SELECT * FROM system.users`.
+    - Ensure the user is permitted to connect from the Dory server IP (ClickHouse user `host` restrictions).
+  </Accordion>
+  <Accordion title="SSL handshake error">
+    - Make sure `ssl: true` or an `https://` host is set when connecting to a TLS-enabled server.
+    - If using a self-signed certificate on a self-hosted cluster, the driver accepts it by default.
+  </Accordion>
+  <Accordion title="Query result too large">
+    Dory enforces a row limit on SELECT queries. If you hit this limit and need larger result sets, use `clickhouse_settings` to adjust `max_result_rows`, or export results directly from ClickHouse.
+  </Accordion>
+  <Accordion title="Wrong database selected">
+    The default database is set at connection time. If you need to query a different database in a specific tab, you can prefix the table reference with the database name (`db.table`) or update the identity's **Database** field.
+  </Accordion>
+</AccordionGroup>

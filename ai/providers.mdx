@@ -1,0 +1,248 @@
+---
+title: "AI providers"
+description: "Configure Dory's pluggable AI provider architecture to use OpenAI, Anthropic, Google Gemini, and more."
+---
+
+Dory uses a pluggable AI provider architecture. Switch between providers by changing environment variables — no code changes required. The provider controls which API is called; the model controls which specific model is used within that provider.
+
+## Environment variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `DORY_AI_PROVIDER` | Yes (if using AI) | Provider identifier. See table below for values. |
+| `DORY_AI_MODEL` | No | Model name override. If set, this model is used for all AI tasks regardless of provider defaults. |
+| `DORY_AI_API_KEY` | Yes (if using AI) | API key for the configured provider. |
+| `DORY_AI_URL` | Depends | Base API URL. Required for `openai-compatible`. Default for `openai` is `https://api.openai.com/v1`. |
+
+<Note>
+  If `DORY_AI_API_KEY` is not set, all AI features (SQL Copilot, database chatbot, schema autocomplete enrichment) are disabled gracefully. All database connection, query, monitoring, and privilege management features remain fully functional.
+</Note>
+
+## Supported providers
+
+<Tabs>
+  <Tab title="OpenAI">
+    The default provider. Uses the official OpenAI API.
+
+    **Provider value:** `openai`
+
+    **Default API URL:** `https://api.openai.com/v1`
+
+    **Recommended models:**
+    - Chat: `gpt-4o`
+    - Fast tasks (fix, tag, explain): `gpt-4o-mini`
+
+    <CodeGroup>
+
+    ```bash Docker
+    docker run -d --name dory \
+      -p 3000:3000 \
+      -e DS_SECRET_KEY="$(openssl rand -base64 32 | tr -d '\n')" \
+      -e BETTER_AUTH_SECRET="$(openssl rand -hex 32)" \
+      -e BETTER_AUTH_URL="http://localhost:3000" \
+      -e DORY_AI_PROVIDER=openai \
+      -e DORY_AI_MODEL=gpt-4o-mini \
+      -e DORY_AI_API_KEY=your_api_key_here \
+      -e DORY_AI_URL=https://api.openai.com/v1 \
+      dorylab/dory:latest
+    ```
+
+    ```bash .env
+    DORY_AI_PROVIDER=openai
+    DORY_AI_MODEL=gpt-4o-mini
+    DORY_AI_API_KEY=sk-...
+    DORY_AI_URL=https://api.openai.com/v1
+    ```
+
+    </CodeGroup>
+
+    If `DORY_AI_MODEL` is not set, Dory selects per-task models automatically: `gpt-4o-mini` for fast tasks like error fixing and column tagging, and `gpt-4o` for chat, table summaries, and title generation.
+  </Tab>
+
+  <Tab title="OpenAI-Compatible">
+    Any service that exposes an OpenAI-compatible chat completions API. This includes local model servers, proxies, and third-party hosted endpoints.
+
+    **Provider value:** `openai-compatible`
+
+    **Required:** `DORY_AI_URL` must be set to the base URL of the compatible API.
+
+    <CodeGroup>
+
+    ```bash .env (Ollama example)
+    DORY_AI_PROVIDER=openai-compatible
+    DORY_AI_MODEL=llama3.1
+    DORY_AI_API_KEY=ollama
+    DORY_AI_URL=http://localhost:11434/v1
+    ```
+
+    ```bash .env (local vLLM example)
+    DORY_AI_PROVIDER=openai-compatible
+    DORY_AI_MODEL=mistral-7b-instruct
+    DORY_AI_API_KEY=token-abc123
+    DORY_AI_URL=http://localhost:8000/v1
+    ```
+
+    </CodeGroup>
+
+    When using `openai-compatible`, `DORY_AI_MODEL` is used for all tasks since there are no provider-specific presets. If `DORY_AI_MODEL` is not set, it falls back to `gpt-4o`.
+
+    <Warning>
+      The target endpoint must support the OpenAI chat completions format (`POST /v1/chat/completions`). Tool calling support is required for the database chatbot's SQL runner and chart builder features.
+    </Warning>
+  </Tab>
+
+  <Tab title="Anthropic">
+    Claude models via the Anthropic official API.
+
+    **Provider value:** `anthropic`
+
+    **Recommended models:**
+    - Chat: `claude-3-5-sonnet-latest`
+    - Fast tasks (fix, tag, explain): `claude-3-5-haiku-latest`
+
+    <CodeGroup>
+
+    ```bash .env
+    DORY_AI_PROVIDER=anthropic
+    DORY_AI_API_KEY=sk-ant-...
+    ```
+
+    ```bash .env (pin a specific model)
+    DORY_AI_PROVIDER=anthropic
+    DORY_AI_MODEL=claude-3-5-sonnet-latest
+    DORY_AI_API_KEY=sk-ant-...
+    ```
+
+    </CodeGroup>
+
+    `DORY_AI_URL` is not needed for Anthropic — the SDK uses the official API endpoint by default.
+
+    If `DORY_AI_MODEL` is not set, Dory uses `claude-3-5-sonnet-latest` for chat and table summaries, and `claude-3-5-haiku-latest` for faster tasks.
+  </Tab>
+
+  <Tab title="Google">
+    Gemini models via the Google Generative AI API.
+
+    **Provider value:** `google`
+
+    **Recommended models:**
+    - Chat: `gemini-1.5-pro-latest`
+    - Fast tasks (fix, tag, explain): `gemini-1.5-flash-latest`
+
+    <CodeGroup>
+
+    ```bash .env
+    DORY_AI_PROVIDER=google
+    DORY_AI_API_KEY=AIza...
+    ```
+
+    ```bash .env (pin a specific model)
+    DORY_AI_PROVIDER=google
+    DORY_AI_MODEL=gemini-1.5-pro-latest
+    DORY_AI_API_KEY=AIza...
+    ```
+
+    </CodeGroup>
+
+    `DORY_AI_URL` is not needed for Google — the SDK uses the official Google AI endpoint by default.
+
+    If `DORY_AI_MODEL` is not set, Dory uses `gemini-1.5-pro-latest` for chat and `gemini-1.5-flash-latest` for faster tasks.
+  </Tab>
+
+  <Tab title="Qwen">
+    Qwen models from Alibaba Cloud via the DashScope OpenAI-compatible endpoint.
+
+    **Provider value:** `qwen`
+
+    **Recommended models:**
+    - Chat: `qwen3-coder-480b-a35b-instruct`
+    - Actions (fix, optimize): `qwen2.5-coder-32b-instruct`
+    - Metadata tasks (tag, explain, summarize): `qwen-plus`
+
+    <CodeGroup>
+
+    ```bash .env
+    DORY_AI_PROVIDER=qwen
+    DORY_AI_API_KEY=sk-...
+    DORY_AI_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+    ```
+
+    ```bash .env (pin a specific model)
+    DORY_AI_PROVIDER=qwen
+    DORY_AI_MODEL=qwen2.5-coder-32b-instruct
+    DORY_AI_API_KEY=sk-...
+    DORY_AI_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+    ```
+
+    </CodeGroup>
+
+    The DashScope endpoint is OpenAI-compatible. `DORY_AI_URL` should point to the DashScope base URL shown above.
+  </Tab>
+
+  <Tab title="xAI">
+    Grok models via the xAI API.
+
+    **Provider value:** `xai`
+
+    **Recommended models:**
+    - Chat: `grok-2-latest`
+    - Fast tasks (fix, tag, explain): `grok-2-mini`
+
+    <CodeGroup>
+
+    ```bash .env
+    DORY_AI_PROVIDER=xai
+    DORY_AI_API_KEY=xai-...
+    ```
+
+    ```bash .env (pin a specific model)
+    DORY_AI_PROVIDER=xai
+    DORY_AI_MODEL=grok-2-latest
+    DORY_AI_API_KEY=xai-...
+    ```
+
+    </CodeGroup>
+
+    `DORY_AI_URL` is not needed for xAI — the SDK uses the official xAI API endpoint by default.
+
+    If `DORY_AI_MODEL` is not set, Dory uses `grok-2-latest` for chat and `grok-2-mini` for faster tasks.
+  </Tab>
+</Tabs>
+
+## Model selection logic
+
+Dory resolves the model to use in this order:
+
+1. **`DORY_AI_MODEL` env var** — if set, this model is used for every AI task across all providers.
+2. **Per-task provider presets** — if `DORY_AI_MODEL` is not set, each provider has defaults for different tasks (chat, action, column tagging, schema explanation, table summary, etc.).
+3. **Fast variant** — for latency-sensitive tasks, Dory can select the fast model for the active provider (e.g., `gpt-4o-mini` for OpenAI, `claude-3-5-haiku-latest` for Anthropic).
+
+Setting `DORY_AI_MODEL` overrides all per-task presets. This is the simplest configuration option if you want all features to use the same model.
+
+## What happens without an AI key
+
+If `DORY_AI_API_KEY` is not set (or the configured provider returns an authentication error), Dory returns a `MISSING_AI_ENV` error code from the Copilot and chat API endpoints. The UI displays a message indicating that AI features are not configured.
+
+The following features are disabled:
+- SQL Copilot (Ask, Action, Context)
+- Database chatbot
+- Schema autocomplete enrichment (semantic tags, column explanations, table summaries)
+
+The following features continue to work:
+- All database connections
+- SQL editor and query execution
+- Result sets and visualizations
+- ClickHouse monitoring
+- ClickHouse privilege management
+- Schema-aware autocomplete (keyword and schema completion still work; AI enrichment is skipped)
+
+## Provider summary
+
+| Provider | `DORY_AI_PROVIDER` | Default chat model | Default fast model |
+|---|---|---|---|
+| OpenAI | `openai` | `gpt-4o` | `gpt-4o-mini` |
+| OpenAI-Compatible | `openai-compatible` | from `DORY_AI_MODEL` | from `DORY_AI_MODEL` |
+| Anthropic | `anthropic` | `claude-3-5-sonnet-latest` | `claude-3-5-haiku-latest` |
+| Google | `google` | `gemini-1.5-pro-latest` | `gemini-1.5-flash-latest` |
+| Qwen | `qwen` | `qwen3-coder-480b-a35b-instruct` | `qwen-turbo` |
+| xAI | `xai` | `grok-2-latest` | `grok-2-mini` |

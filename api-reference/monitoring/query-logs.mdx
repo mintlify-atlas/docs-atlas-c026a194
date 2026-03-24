@@ -1,0 +1,150 @@
+---
+title: "Query logs"
+description: "Retrieve ClickHouse query execution logs."
+---
+
+<Note>
+  Requires the `x-connection-id` header pointing to a ClickHouse connection with `queryInsights` capability.
+</Note>
+
+Returns paginated query execution log entries from ClickHouse's `system.query_log` table. Use this to inspect individual query executions, timings, and errors within a time window.
+
+## Endpoint
+
+```
+POST /api/monitoring/query-logs
+```
+
+## Headers
+
+<ParamField header="x-connection-id" type="string" required>
+  ID of the active ClickHouse connection.
+</ParamField>
+
+## Request body
+
+<ParamField body="pageIndex" type="number" default="0">
+  Zero-based page index.
+</ParamField>
+
+<ParamField body="pageSize" type="number" default="10">
+  Number of rows per page.
+</ParamField>
+
+<ParamField body="filters" type="object">
+  Query insight filters.
+  <Expandable title="properties">
+    <ResponseField name="timeRange" type="string" default="1h">
+      Time window. One of `1h`, `6h`, `24h`, `7d`.
+    </ResponseField>
+    <ResponseField name="user" type="string" default="all">
+      Filter by ClickHouse username.
+    </ResponseField>
+    <ResponseField name="database" type="string" default="all">
+      Filter by database name.
+    </ResponseField>
+    <ResponseField name="queryType" type="string" default="all">
+      Filter by query type. One of `all`, `select`, `insert`, `ddl`, `other`.
+    </ResponseField>
+    <ResponseField name="minDurationMs" type="number" default="0">
+      Minimum query duration in milliseconds.
+    </ResponseField>
+    <ResponseField name="search" type="string" default="">
+      Free-text search string applied to query text.
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+## Response
+
+<ResponseField name="ok" type="boolean" required>
+  `true` on success.
+</ResponseField>
+
+<ResponseField name="data" type="object" required>
+  <Expandable title="properties" defaultOpen>
+    <ResponseField name="rows" type="object[]" required>
+      Page of query log entries. Each row is a ClickHouse query log record. Common fields include:
+      <Expandable title="row fields">
+        <ResponseField name="query_id" type="string">
+          Unique query identifier from ClickHouse.
+        </ResponseField>
+        <ResponseField name="query" type="string">
+          The SQL text that was executed.
+        </ResponseField>
+        <ResponseField name="user" type="string">
+          ClickHouse user who executed the query.
+        </ResponseField>
+        <ResponseField name="query_start_time" type="string">
+          Query start timestamp.
+        </ResponseField>
+        <ResponseField name="query_duration_ms" type="number">
+          Duration of the query in milliseconds.
+        </ResponseField>
+        <ResponseField name="read_rows" type="number">
+          Number of rows read.
+        </ResponseField>
+        <ResponseField name="read_bytes" type="number">
+          Number of bytes read.
+        </ResponseField>
+        <ResponseField name="result_rows" type="number">
+          Number of rows in the result set.
+        </ResponseField>
+        <ResponseField name="exception" type="string">
+          Exception message if the query failed.
+        </ResponseField>
+        <ResponseField name="databases" type="string[]">
+          Databases accessed by the query.
+        </ResponseField>
+        <ResponseField name="type" type="string">
+          ClickHouse query type (e.g. `QueryFinish`, `ExceptionWhileProcessing`).
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="total" type="number" required>
+      Total number of matching rows (before pagination).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+```bash
+curl -X POST https://your-dory-instance/api/monitoring/query-logs \
+  -H "Cookie: <session-cookie>" \
+  -H "x-connection-id: conn_ch123" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "pageIndex": 0,
+    "pageSize": 20,
+    "filters": {
+      "timeRange": "6h",
+      "user": "analyst",
+      "minDurationMs": 100
+    }
+  }'
+```
+
+```json 200
+{
+  "ok": true,
+  "data": {
+    "rows": [
+      {
+        "query_id": "abc123",
+        "query": "SELECT count() FROM events",
+        "user": "analyst",
+        "query_start_time": "2024-06-01T09:00:00.000Z",
+        "query_duration_ms": 312,
+        "read_rows": 4000000,
+        "read_bytes": 32000000,
+        "result_rows": 1,
+        "exception": "",
+        "databases": ["analytics"],
+        "type": "QueryFinish"
+      }
+    ],
+    "total": 183
+  }
+}
+```

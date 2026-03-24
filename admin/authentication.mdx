@@ -1,0 +1,206 @@
+---
+title: "Authentication"
+description: "Configure authentication for Dory — email/password, GitHub OAuth, and session management."
+---
+
+Dory uses [Better Auth](https://www.better-auth.com/) for all authentication. The auth layer lives in `apps/web/lib/auth.ts` and is backed by the application's Postgres (or PGLite) database via the Drizzle adapter.
+
+## Supported auth methods
+
+<CardGroup cols={2}>
+  <Card title="Email / password" icon="envelope">
+    Sign up and sign in with an email address and password. Email verification is required before first login.
+  </Card>
+  <Card title="GitHub OAuth" icon="github">
+    Sign in with a GitHub account. Requires `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`.
+  </Card>
+  <Card title="Google OAuth" icon="google">
+    Sign in with a Google account. Requires `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+  </Card>
+</CardGroup>
+
+## Configuration
+
+Set these environment variables before starting Dory.
+
+### Core auth variables
+
+<ParamField path="BETTER_AUTH_SECRET" type="string" required>
+  Secret key used to sign sessions and tokens. Generate with:
+  ```bash
+  openssl rand -hex 32
+  ```
+  The `.env.example` file ships with a placeholder value. Replace it for any production or shared deployment.
+</ParamField>
+
+<ParamField path="BETTER_AUTH_URL" type="string">
+  The public base URL of your Dory instance, e.g. `https://dory.example.com`. Used to construct invitation and verification email links. If not set, invitation emails are skipped.
+</ParamField>
+
+<ParamField path="TRUSTED_ORIGINS" type="string">
+  Comma-separated list of origins that are trusted for cross-origin requests. Defaults allow `http://localhost:*` and `http://127.0.0.1:*`. Example:
+  ```
+  TRUSTED_ORIGINS=https://dory.example.com,http://localhost:3000
+  ```
+</ParamField>
+
+### GitHub OAuth
+
+<ParamField path="GITHUB_CLIENT_ID" type="string">
+  OAuth App client ID from GitHub. Leave empty to disable GitHub login.
+</ParamField>
+
+<ParamField path="GITHUB_CLIENT_SECRET" type="string">
+  OAuth App client secret from GitHub.
+</ParamField>
+
+<Steps>
+  <Step title="Create a GitHub OAuth App">
+    Go to **GitHub → Settings → Developer settings → OAuth Apps → New OAuth App**.
+  </Step>
+  <Step title="Set the callback URL">
+    Set the Authorization callback URL to:
+    ```
+    https://<your-domain>/api/auth/callback/github
+    ```
+  </Step>
+  <Step title="Copy the credentials">
+    Copy the **Client ID** and generate a **Client secret**.
+  </Step>
+  <Step title="Add to your environment">
+    ```bash
+    GITHUB_CLIENT_ID=your_client_id
+    GITHUB_CLIENT_SECRET=your_client_secret
+    ```
+  </Step>
+</Steps>
+
+### Google OAuth
+
+<ParamField path="GOOGLE_CLIENT_ID" type="string">
+  OAuth client ID from Google Cloud Console. Leave empty to disable Google login.
+</ParamField>
+
+<ParamField path="GOOGLE_CLIENT_SECRET" type="string">
+  OAuth client secret from Google Cloud Console.
+</ParamField>
+
+<Steps>
+  <Step title="Create a Google OAuth client">
+    Go to **Google Cloud Console → APIs &amp; Services → Credentials → Create Credentials → OAuth client ID**. Choose **Web application**.
+  </Step>
+  <Step title="Add an authorized redirect URI">
+    ```
+    https://<your-domain>/api/auth/callback/google
+    ```
+  </Step>
+  <Step title="Add to your environment">
+    ```bash
+    GOOGLE_CLIENT_ID=your_client_id
+    GOOGLE_CLIENT_SECRET=your_client_secret
+    ```
+  </Step>
+</Steps>
+
+### Better Auth Infra (optional)
+
+Dory integrates the Better Auth `dash` and `sentinel` plugins for activity tracking and security protections.
+
+<ParamField path="BETTER_AUTH_API_KEY" type="string">
+  API key for Better Auth Infra. Required to enable audit logs and Sentinel-backed threat detection.
+</ParamField>
+
+<ParamField path="BETTER_AUTH_API_URL" type="string">
+  Override the Better Auth Infra API endpoint. Leave empty to use the default.
+</ParamField>
+
+<ParamField path="BETTER_AUTH_KV_URL" type="string">
+  Override the Better Auth KV store URL. Used by Sentinel for rate-limit state. Leave empty to use the default.
+</ParamField>
+
+## Sign-up and sign-in flows
+
+<Tabs>
+  <Tab title="Email / password">
+    **Sign up**
+
+    1. The user submits their name, email, and password.
+    2. Dory creates the account and sends a verification email to the provided address.
+    3. The user clicks the verification link.
+    4. After verification, the session is created and the user is signed in automatically (`autoSignInAfterVerification: true`).
+    5. A default organization is created for the user.
+
+    **Sign in**
+
+    1. The user submits their email and password.
+    2. If email verification is required and the email is not yet verified, the server returns a `403` response.
+    3. On success, a 30-day session cookie is issued.
+  </Tab>
+  <Tab title="GitHub OAuth">
+    1. The user clicks **Sign in with GitHub**.
+    2. GitHub redirects back to `/api/auth/callback/github`.
+    3. If the GitHub account has a verified email, Dory marks `emailVerified: true` and creates a default organization immediately.
+    4. A session cookie is issued and the user is redirected to the callback URL (default: `/`).
+    5. On error, the user is redirected to `/auth/error`.
+  </Tab>
+  <Tab title="Google OAuth">
+    1. The user clicks **Sign in with Google**.
+    2. Google redirects back to `/api/auth/callback/google`.
+    3. If the Google account has a verified email, Dory marks `emailVerified: true` and creates a default organization immediately.
+    4. A session cookie is issued and the user is redirected to the callback URL.
+  </Tab>
+</Tabs>
+
+## Email verification
+
+Email verification is enabled by default (`requireEmailVerification: true`). A verification email is sent on every sign-up.
+
+The email contains a link to `/api/auth/verify-email?token=...`. After the user clicks it, Dory:
+
+1. Marks the account as verified.
+2. Creates the default organization if one does not already exist.
+3. Signs the user in automatically.
+
+<Note>
+  Email delivery requires a mail provider. Configure `RESEND_API_KEY` (Resend) or an equivalent SMTP provider. Without a mail provider, verification emails are not delivered and users cannot complete sign-up.
+</Note>
+
+## Password reset
+
+Users can request a password reset from the sign-in page. Dory sends a reset email containing a single-use link. The link points to `/auth/reset-password?token=...`.
+
+Password reset also requires a configured mail provider.
+
+## Session management
+
+Dory issues cookie-based sessions backed by the Better Auth session store.
+
+- **Session duration** — 30 days (`expiresIn: 60 * 60 * 24 * 30`).
+- **Rolling expiry** — The session expiration is extended by 1 day on every active request (`updateAge: 60 * 60 * 24`).
+- **Active organization** — Each session stores an `activeOrganizationId`. When a session is created, Dory resolves the organization from the user's memberships and sets it automatically.
+
+JWT tokens are available via the `jwt` plugin for API-level access.
+
+## Security protections
+
+When `BETTER_AUTH_API_KEY` is configured, the `sentinel` plugin enforces the following:
+
+| Protection | Configuration |
+|---|---|
+| Credential stuffing | Challenge at 3 attempts, block at 5 within 1 hour. 15-minute cooldown. |
+| Velocity limiting | Challenge at 10 requests, block at 20 within 1 hour. Max 5 sign-ups per visitor. |
+| Impossible travel | Logged but not blocked by default. |
+| Bot blocking | Challenge required. |
+| Suspicious IP blocking | Challenge required. |
+
+The client automatically solves challenges (`autoSolveChallenge: true` in `auth-client.ts`).
+
+## Single-user mode (Docker / demo)
+
+When `DORY_RUNTIME=docker` and no email provider is configured, Dory runs as a single-user workspace. The pre-seeded credentials in `.env.example` let you sign in immediately without going through email verification.
+
+In the desktop app (`DORY_RUNTIME=desktop`), the authentication layer is still present but organizations are not created. The desktop app uses `useSecureCookies: false` and trusts `http://127.0.0.1:*` and `dory://` origins.
+
+<Warning>
+  The default `BETTER_AUTH_SECRET` in `.env.example` is a **demo value**. Always replace it with a freshly generated secret for any internet-accessible deployment.
+</Warning>

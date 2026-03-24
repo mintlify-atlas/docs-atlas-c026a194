@@ -1,0 +1,282 @@
+---
+title: "Execute query"
+description: "Execute a SQL query against a connected database."
+---
+
+<Note>
+  The active connection is resolved from the `x-connection-id` request header. The connection pool must already be established via [`POST /api/connection/connect`](/api-reference/connections/test) before executing queries. Up to 100 SQL statements per request are supported. Multiple statements are split and executed sequentially.
+</Note>
+
+Executes one or more SQL statements against the target database. Multi-statement input is split by the server and each statement is executed in sequence. Results are returned as a structured session object with per-statement result sets.
+
+## Endpoint
+
+```
+POST /api/query
+```
+
+## Headers
+
+<ParamField header="x-connection-id" type="string" required>
+  ID of the active connection. The corresponding pool must be established before calling this endpoint.
+</ParamField>
+
+## Request body
+
+<ParamField body="sql" type="string" required>
+  The SQL text to execute. May contain multiple semicolon-separated statements (up to 100).
+</ParamField>
+
+<ParamField body="database" type="string">
+  Target database context for the query. Must match `^[a-zA-Z0-9_.-]+$` and be at most 64 characters.
+</ParamField>
+
+<ParamField body="sessionId" type="string">
+  Client-supplied session identifier. If omitted, a UUID is generated server-side.
+</ParamField>
+
+<ParamField body="tabId" type="string">
+  ID of the SQL console tab that initiated the query. Used for telemetry.
+</ParamField>
+
+<ParamField body="userId" type="string">
+  User identifier for telemetry. Defaults to the session user.
+</ParamField>
+
+<ParamField body="source" type="string">
+  Source label for telemetry, e.g. `sql-console`, `copilot`.
+</ParamField>
+
+<ParamField body="stopOnError" type="boolean" default="false">
+  When `true`, execution stops at the first failing statement.
+</ParamField>
+
+<ParamField body="refId" type="string">
+  Optional client reference ID echoed back in the response metadata.
+</ParamField>
+
+## Response
+
+<ResponseField name="ok" type="boolean" required>
+  `true` when the request was handled successfully (individual statement errors do not set this to `false`).
+</ResponseField>
+
+<ResponseField name="data" type="object" required>
+  <Expandable title="properties" defaultOpen>
+    <ResponseField name="session" type="object" required>
+      Aggregate session summary across all statements.
+      <Expandable title="properties">
+        <ResponseField name="sessionId" type="string">
+          Session identifier.
+        </ResponseField>
+        <ResponseField name="connectionId" type="string">
+          Connection ID used.
+        </ResponseField>
+        <ResponseField name="database" type="string">
+          Database context.
+        </ResponseField>
+        <ResponseField name="sqlText" type="string">
+          Full SQL input as submitted.
+        </ResponseField>
+        <ResponseField name="status" type="string">
+          `success` or `error`.
+        </ResponseField>
+        <ResponseField name="errorMessage" type="string">
+          First error message, if any.
+        </ResponseField>
+        <ResponseField name="startedAt" type="number">
+          Epoch milliseconds when execution started.
+        </ResponseField>
+        <ResponseField name="finishedAt" type="number">
+          Epoch milliseconds when execution finished.
+        </ResponseField>
+        <ResponseField name="durationMs" type="number">
+          Total execution duration in milliseconds.
+        </ResponseField>
+        <ResponseField name="resultSetCount" type="number">
+          Number of result sets returned.
+        </ResponseField>
+        <ResponseField name="stopOnError" type="boolean">
+          Whether execution was configured to stop on error.
+        </ResponseField>
+        <ResponseField name="tabId" type="string">
+          Originating tab ID.
+        </ResponseField>
+        <ResponseField name="userId" type="string">
+          User ID from the request.
+        </ResponseField>
+        <ResponseField name="source" type="string">
+          Source label from the request.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="queryResultSets" type="object[]" required>
+      Per-statement result set metadata.
+      <Expandable title="properties">
+        <ResponseField name="sessionId" type="string">
+          Parent session ID.
+        </ResponseField>
+        <ResponseField name="setIndex" type="number">
+          Zero-based index of this statement.
+        </ResponseField>
+        <ResponseField name="sqlText" type="string">
+          The individual statement text.
+        </ResponseField>
+        <ResponseField name="sqlOp" type="string">
+          Normalized operation type: `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `REPLACE`, `DDL`, `TXN`, or the raw first keyword.
+        </ResponseField>
+        <ResponseField name="title" type="string">
+          Auto-generated display title: `{sqlOp}: {first 40 chars}`.
+        </ResponseField>
+        <ResponseField name="columns" type="object[]">
+          Column descriptors returned by the driver. `null` for non-SELECT statements.
+        </ResponseField>
+        <ResponseField name="rowCount" type="number">
+          Number of rows in this result set.
+        </ResponseField>
+        <ResponseField name="affectedRows" type="number">
+          Rows affected for DML statements.
+        </ResponseField>
+        <ResponseField name="limited" type="boolean">
+          `true` when the result set was truncated by a server-side row limit.
+        </ResponseField>
+        <ResponseField name="limit" type="number">
+          The row limit applied, if any.
+        </ResponseField>
+        <ResponseField name="status" type="string">
+          `success` or `error`.
+        </ResponseField>
+        <ResponseField name="errorMessage" type="string">
+          Error message for this statement, if it failed.
+        </ResponseField>
+        <ResponseField name="errorCode" type="string">
+          Driver error code.
+        </ResponseField>
+        <ResponseField name="errorSqlState" type="string">
+          SQL state from the driver.
+        </ResponseField>
+        <ResponseField name="startedAt" type="string">
+          ISO 8601 start timestamp.
+        </ResponseField>
+        <ResponseField name="finishedAt" type="string">
+          ISO 8601 finish timestamp.
+        </ResponseField>
+        <ResponseField name="durationMs" type="number">
+          Statement execution duration in milliseconds.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="results" type="array[]" required>
+      Parallel array to `queryResultSets`. Each entry is an array of row objects for the corresponding statement.
+    </ResponseField>
+    <ResponseField name="meta" type="object" required>
+      Request-level metadata.
+      <Expandable title="properties">
+        <ResponseField name="refId" type="string">
+          Client reference ID echoed from the request.
+        </ResponseField>
+        <ResponseField name="durationMs" type="number">
+          Total request duration in milliseconds.
+        </ResponseField>
+        <ResponseField name="totalSets" type="number">
+          Total number of result sets.
+        </ResponseField>
+        <ResponseField name="stopOnError" type="boolean">
+          Whether execution stopped on first error.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Cancel a query
+
+```
+POST /api/query/cancel
+```
+
+Attempts to cancel an in-progress query. The request body and behavior are driver-dependent.
+
+## Examples
+
+<CodeGroup>
+
+```bash Execute SELECT
+curl -X POST https://your-dory-instance/api/query \
+  -H "Cookie: <session-cookie>" \
+  -H "x-connection-id: conn_abc123" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sql": "SELECT database, count() AS cnt FROM system.tables GROUP BY database",
+    "database": "default",
+    "source": "sql-console"
+  }'
+```
+
+```bash Multiple statements
+curl -X POST https://your-dory-instance/api/query \
+  -H "Cookie: <session-cookie>" \
+  -H "x-connection-id: conn_abc123" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sql": "SELECT 1; SELECT 2;",
+    "stopOnError": true
+  }'
+```
+
+</CodeGroup>
+
+```json 200
+{
+  "ok": true,
+  "data": {
+    "session": {
+      "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+      "connectionId": "conn_abc123",
+      "database": "default",
+      "sqlText": "SELECT database, count() AS cnt FROM system.tables GROUP BY database",
+      "status": "success",
+      "errorMessage": null,
+      "startedAt": 1717228800000,
+      "finishedAt": 1717228800054,
+      "durationMs": 54,
+      "resultSetCount": 1,
+      "stopOnError": false,
+      "source": "sql-console"
+    },
+    "queryResultSets": [
+      {
+        "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+        "setIndex": 0,
+        "sqlText": "SELECT database, count() AS cnt FROM system.tables GROUP BY database",
+        "sqlOp": "SELECT",
+        "title": "SELECT: SELECT database, count() AS cnt FROM s",
+        "columns": [
+          { "name": "database", "type": "String" },
+          { "name": "cnt", "type": "UInt64" }
+        ],
+        "rowCount": 3,
+        "affectedRows": null,
+        "limited": false,
+        "limit": null,
+        "status": "success",
+        "errorMessage": null,
+        "durationMs": 54
+      }
+    ],
+    "results": [
+      [
+        { "database": "default", "cnt": 12 },
+        { "database": "system", "cnt": 87 },
+        { "database": "analytics", "cnt": 5 }
+      ]
+    ],
+    "meta": {
+      "refId": "client-ref-001",
+      "durationMs": 54,
+      "totalSets": 1,
+      "stopOnError": false
+    }
+  }
+}
+```

@@ -1,0 +1,154 @@
+---
+title: "Database chat"
+description: "Conversational AI assistant that understands your connected database schema."
+---
+
+The database chatbot is a conversational interface for exploring your connected databases. You can ask questions in plain English, request SQL queries, explore table structure, and get chart-ready aggregations — all within a persistent chat session tied to your connection.
+
+<CardGroup cols={2}>
+  <Card title="Schema-aware" icon="database">
+    Automatically reads your connected database schema so it understands which tables and columns exist.
+  </Card>
+  <Card title="SQL runner built in" icon="play">
+    The chatbot can execute read-only SELECT queries against your live database and explain the results.
+  </Card>
+  <Card title="Chart generation" icon="chart-bar">
+    Ask for visualizations and the chatbot will run the query and produce a chart configuration.
+  </Card>
+  <Card title="Persistent history" icon="clock-rotate-left">
+    Chat sessions are saved per connection and tab, so your conversation history is available when you return.
+  </Card>
+</CardGroup>
+
+<Note>
+  The chatbot requires an AI provider to be configured. If `DORY_AI_API_KEY` is not set, the chat interface is disabled. See [AI providers](/ai/providers).
+</Note>
+
+## How it understands your schema
+
+When you send a message, Dory builds a schema context from your connected database on the server side:
+
+1. It connects to the active datasource using your current connection.
+2. It fetches up to 50 representative tables from the database (configurable via `CHATBOT_TABLE_SAMPLE_LIMIT`).
+3. For each table, it retrieves up to 50 columns with names, types, primary key flags, and comments (configurable via `CHATBOT_COLUMN_SAMPLE_LIMIT`).
+4. This schema context is injected into the system prompt alongside the conversation history.
+
+The model is instructed not to invent tables or columns that are not in the context. If the schema is insufficient to answer a question, it says so rather than guessing.
+
+If you are focused on a specific table, Dory narrows the schema context to that table's columns only, giving the model a more precise view.
+
+## Starting a chat session
+
+<Steps>
+  <Step title="Open the chatbot panel">
+    With a database connection active, navigate to the chat interface in the sidebar or use the chatbot icon in the editor toolbar.
+  </Step>
+  <Step title="Select your database context">
+    The chatbot uses the active connection and database. If you want to chat about a specific table, open it in the table explorer first.
+  </Step>
+  <Step title="Ask your first question">
+    Type a question in plain English. The chatbot has your schema in context from the first message.
+  </Step>
+</Steps>
+
+## Use cases
+
+### Finding field meanings
+
+Ask what a column is used for. The model uses column types, comments from the schema, and semantic tags computed by Dory's schema analysis pipeline to explain each field.
+
+**Example conversation:**
+
+> **You:** What does the `lc_provider` column in the `events` table represent?
+>
+> **Dory:** Based on the schema, `lc_provider` is a low-cardinality String column in the `events` table. Given the column name and its type, it likely stores the provider or source identifier for each event — for example, a partner name, integration type, or channel label. The `LowCardinality` type in ClickHouse is used for columns with a small number of distinct values.
+
+### Generating query ideas
+
+Ask what you can usefully query from a table. The chatbot reads the schema and suggests queries tailored to the actual columns present.
+
+**Example conversation:**
+
+> **You:** What are some useful queries I can run on the `orders` table?
+>
+> **Dory:** Here are a few queries based on the `orders` table schema:
+>
+> 1. **Order volume by day** — count orders grouped by `created_at` date
+> 2. **Revenue by status** — sum `total_amount` grouped by `status`
+> 3. **Top customers** — rank by `customer_id` with total spend
+>
+> Want me to run any of these?
+
+### Running live queries
+
+The chatbot can execute read-only SELECT queries directly against your connected database. It uses the `sqlRunner` tool internally.
+
+**Example conversation:**
+
+> **You:** How many orders were placed in the last 7 days?
+>
+> **Dory:** *(runs query)*
+>
+> ```sql
+> SELECT count() AS order_count
+> FROM orders
+> WHERE created_at >= now() - INTERVAL 7 DAY
+> ```
+>
+> Result: **1,842 orders** in the last 7 days.
+
+<Tip>
+  The chatbot only runs read-only SELECT queries. If it generates a query that requires manual execution (for example, a write operation), it will tell you to run it in the SQL editor instead.
+</Tip>
+
+### Exploring table structure
+
+Ask the chatbot to describe a table's structure, explain its purpose, or list its columns with types.
+
+**Example conversation:**
+
+> **You:** Describe the `sessions` table
+>
+> **Dory:** The `sessions` table tracks user session activity. It has the following key columns:
+> - `session_id` (String) — unique session identifier
+> - `user_id` (UInt64) — references the user
+> - `started_at` (DateTime) — session start time
+> - `duration_ms` (UInt32) — session length in milliseconds
+> - `referrer` (LowCardinality(String)) — traffic source
+
+### Generating charts
+
+Ask for a visualization and the chatbot will run the aggregation query and produce a chart.
+
+**Example conversation:**
+
+> **You:** Show me a line chart of daily signups over the last 30 days
+>
+> **Dory:** *(runs aggregation query, then calls `chartBuilder`)*
+>
+> *(renders a line chart with date on the x-axis and signup count on the y-axis)*
+>
+> Signups have been trending upward over the period, with a spike on day 18.
+
+## Chat history
+
+Chat sessions are persisted per user, organization, and connection. Each session is stored with:
+
+- The connection ID and active database at session creation
+- All user and assistant messages, including tool results
+- Session metadata including the model used and schema context at the time
+
+When you return to a chat tab, the conversation history is restored and the model receives the recent messages as context (up to the configured history limit). This means you can continue mid-conversation without repeating context.
+
+Sessions are scoped to your organization. Each tab in the SQL editor has its own copilot session; separate standalone chat sessions are tracked independently.
+
+## Multi-step reasoning
+
+The chatbot supports up to 4 reasoning steps per response. This allows it to:
+
+1. Run an initial schema inspection query (`DESCRIBE` or `SHOW`) to understand a table
+2. Use those results to write a more accurate follow-up query
+3. Analyze the query results and form an explanation
+4. Call the chart builder to visualize the output
+
+If the model cannot answer confidently with the available schema context, it says so rather than fabricating results.

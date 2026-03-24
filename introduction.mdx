@@ -1,0 +1,93 @@
+---
+title: "Introduction"
+description: "Dory is an AI-native SQL workspace for modern databases — combining intelligent SQL editing, schema-aware AI copilot, conversational database chat, and deep operational tools in one place."
+---
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get Dory running in minutes with Docker or download the desktop app
+  </Card>
+  <Card title="SQL Copilot" icon="wand-magic-sparkles" href="/ai/sql-copilot">
+    AI-powered SQL generation, fixing, and explanation grounded in your schema
+  </Card>
+  <Card title="Database Chat" icon="message-bot" href="/ai/database-chat">
+    Conversational AI that understands your connected database
+  </Card>
+  <Card title="ClickHouse Monitoring" icon="chart-line" href="/clickhouse/monitoring">
+    Real-time query metrics, latency trends, and multi-dimensional filtering
+  </Card>
+</CardGroup>
+
+## What is Dory?
+
+Dory is an AI-native data workspace built for engineers, analysts, and database platform teams. It brings together everything you need to work with modern databases — without switching between tools.
+
+Unlike generic SQL clients, Dory's AI features are **grounded in your real database schema**. The SQL Copilot understands your actual tables and columns. The chatbot reads your connected database. Autocomplete suggests based on your live schema — not generic keywords.
+
+## Key capabilities
+
+<CardGroup cols={2}>
+  <Card title="SQL Copilot" icon="brain" href="/ai/sql-copilot">
+    Generate SQL from natural language, fix errors, and explain query logic
+  </Card>
+  <Card title="Schema-Aware Autocomplete" icon="keyboard" href="/ai/schema-autocomplete">
+    Completions for tables, columns, functions, and aliases from your real schema
+  </Card>
+  <Card title="Intelligent SQL Editor" icon="code" href="/sql-editor/overview">
+    Multi-tab workspace with result sets, saved queries, and chart visualizations
+  </Card>
+  <Card title="Database Chatbot" icon="comments" href="/ai/database-chat">
+    Ask questions in plain English about your tables, data, and query ideas
+  </Card>
+  <Card title="ClickHouse Monitoring" icon="gauge-high" href="/clickhouse/monitoring">
+    P50/P95 latency trends, QPM tracking, and multi-dimensional query filtering
+  </Card>
+  <Card title="ClickHouse Privileges" icon="shield-halved" href="/clickhouse/privileges">
+    Manage users and roles without writing GRANT SQL manually
+  </Card>
+</CardGroup>
+
+## Database support
+
+| Database   | Status                |
+|------------|-----------------------|
+| ClickHouse | Deeply integrated     |
+| PostgreSQL | Supported (Beta)      |
+| MySQL      | Supported (Beta)      |
+| DuckDB     | Planned               |
+| SQLite     | In development        |
+
+## Deployment options
+
+Dory runs in two modes:
+
+- **Docker self-hosting** — One-command deployment, runs on your own infrastructure
+- **Desktop app** — Native macOS and Windows app via Electron, no server needed
+
+Both modes use the same `apps/web` application. The runtime is determined by the `DORY_RUNTIME` environment variable.
+
+<CardGroup cols={2}>
+  <Card title="Deploy with Docker" icon="docker" href="/deployment/docker">
+    Run Dory with a single Docker command
+  </Card>
+  <Card title="Desktop App" icon="desktop" href="/deployment/desktop">
+    Download for macOS or Windows
+  </Card>
+</CardGroup>
+
+## AI provider support
+
+Dory uses a pluggable AI provider architecture. Switch between providers by changing environment variables — no code changes required.
+
+| Provider         | `DORY_AI_PROVIDER` value | Description                          |
+|------------------|--------------------------|--------------------------------------|
+| OpenAI           | `openai`                 | Default. Uses official OpenAI API.   |
+| OpenAI-Compatible| `openai-compatible`      | Any OpenAI-compatible endpoint       |
+| Anthropic        | `anthropic`              | Claude models via Anthropic API      |
+| Google           | `google`                 | Gemini models via Google AI          |
+| Qwen (Alibaba)   | `qwen`                   | Qwen models via DashScope            |
+| xAI              | `xai`                    | Grok models via xAI API              |
+
+<Note>
+  AI features are optional. If `DORY_AI_API_KEY` is not set, the SQL Copilot and chatbot features will be disabled, but all other database tools remain fully functional.
+</Note>

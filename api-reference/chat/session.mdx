@@ -1,0 +1,269 @@
+---
+title: "Chat session"
+description: "Manage database chat sessions and send messages."
+---
+
+<Note>
+  The chat API requires an authenticated session. The main `POST /api/chat` endpoint returns a streaming `UIMessageStream` response using the AI SDK's wire format — it is not a standard JSON response. Session persistence is automatic when the user is authenticated and an organization context is available.
+</Note>
+
+Dory's chat API provides a conversational AI interface for querying and exploring databases. Sessions are persisted automatically and support two modes: copilot sessions tied to a SQL console tab, and global chat sessions.
+
+## Send a message
+
+```
+POST /api/chat
+```
+
+Sends a message and streams back the AI response. The response is a streaming `UIMessageStream` in the AI SDK format.
+
+**Request body**
+
+<ParamField body="id" type="string" required>
+  Client-generated message ID for the current user message.
+</ParamField>
+
+<ParamField body="messages" type="object[]" required>
+  Full conversation history as `UIMessage` objects (AI SDK format). The server uses up to the last `MAX_HISTORY_MESSAGES` messages as context.
+</ParamField>
+
+<ParamField body="connectionId" type="string">
+  Active connection ID. When provided, the AI gains access to the schema context and a SQL runner tool.
+</ParamField>
+
+<ParamField body="database" type="string">
+  Active database to use for schema context and SQL execution.
+</ParamField>
+
+<ParamField body="table" type="string">
+  Active table to include in schema context.
+</ParamField>
+
+<ParamField body="tableSchema" type="string">
+  Fallback schema string used when no live schema context is available.
+</ParamField>
+
+<ParamField body="chatId" type="string">
+  Existing session ID to continue. When omitted, a new session is created.
+</ParamField>
+
+<ParamField body="tabId" type="string">
+  SQL console tab ID. When provided, a copilot session is created or retrieved for that tab.
+</ParamField>
+
+<ParamField body="model" type="string">
+  AI model name to use. Ignored when `USE_CLOUD_AI` is enabled.
+</ParamField>
+
+<ParamField body="webSearch" type="boolean">
+  Reserved for future use.
+</ParamField>
+
+<ParamField body="copilotEnvelope" type="object">
+  Structured copilot context envelope (v1 format) used to pass SQL console state to the AI.
+</ParamField>
+
+**Response headers**
+
+| Header | Description |
+|---|---|
+| `x-chat-id` | The session ID assigned to this conversation |
+
+**Streaming response**
+
+The response body is a `UIMessageStream` in the AI SDK wire protocol. The stream emits chunks of type `UIMessageChunk` which the AI SDK's `useChat` hook consumes directly on the client.
+
+When the AI invokes built-in tools (`sqlRunner`, `chartBuilder`), tool call and tool result chunks are included in the stream.
+
+---
+
+## Session management
+
+### Get session
+
+```
+GET /api/chat/session/{sessionId}
+```
+
+Returns a session and all its persisted messages.
+
+<ParamField path="sessionId" type="string" required>
+  The session ID.
+</ParamField>
+
+**Response**
+
+<ResponseField name="data" type="object" required>
+  <Expandable title="properties" defaultOpen>
+    <ResponseField name="session" type="object" required>
+      Session record.
+      <Expandable title="properties">
+        <ResponseField name="id" type="string">Session ID.</ResponseField>
+        <ResponseField name="title" type="string">Session title, auto-generated or set by the user.</ResponseField>
+        <ResponseField name="type" type="string">Session type: `copilot` (tab-bound) or `global`.</ResponseField>
+        <ResponseField name="tabId" type="string">Linked SQL console tab ID (copilot sessions only).</ResponseField>
+        <ResponseField name="connectionId" type="string">Active connection ID.</ResponseField>
+        <ResponseField name="activeDatabase" type="string">Active database at session creation.</ResponseField>
+        <ResponseField name="activeSchema" type="string">Active schema at session creation.</ResponseField>
+        <ResponseField name="metadata" type="object">Arbitrary session metadata.</ResponseField>
+        <ResponseField name="createdAt" type="string">ISO 8601 creation timestamp.</ResponseField>
+        <ResponseField name="updatedAt" type="string">ISO 8601 last-update timestamp.</ResponseField>
+        <ResponseField name="archivedAt" type="string">ISO 8601 archive timestamp, if archived.</ResponseField>
+        <ResponseField name="lastMessageAt" type="string">ISO 8601 timestamp of the last message.</ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="messages" type="object[]" required>
+      Ordered list of persisted messages.
+      <Expandable title="properties">
+        <ResponseField name="id" type="string">Message ID.</ResponseField>
+        <ResponseField name="sessionId" type="string">Parent session ID.</ResponseField>
+        <ResponseField name="userId" type="string">Null for assistant and tool messages.</ResponseField>
+        <ResponseField name="role" type="string">`user`, `assistant`, or `tool`.</ResponseField>
+        <ResponseField name="sequence" type="number">Message sequence number.</ResponseField>
+        <ResponseField name="parts" type="object[]">Message parts in AI SDK UIMessage format.</ResponseField>
+        <ResponseField name="metadata" type="object">Message-level metadata.</ResponseField>
+        <ResponseField name="createdAt" type="string">ISO 8601 creation timestamp.</ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+### Update session
+
+```
+PATCH /api/chat/session/{sessionId}
+```
+
+<ParamField path="sessionId" type="string" required>
+  Session ID to update.
+</ParamField>
+
+<ParamField body="title" type="string">
+  New title. Pass `null` to clear.
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Metadata patch. Pass `null` to clear.
+</ParamField>
+
+---
+
+### Delete session
+
+```
+DELETE /api/chat/session/{sessionId}
+```
+
+Archives the session (or deletes it if archiving is not available). Returns `200` on success.
+
+---
+
+## Copilot session
+
+### Get copilot session by tab
+
+```
+GET /api/chat/session/copilot?tabId={tabId}
+```
+
+Returns the copilot session associated with a SQL console tab, or `null` if none exists.
+
+<ParamField query="tabId" type="string" required>
+  SQL console tab ID.
+</ParamField>
+
+---
+
+### Create or get copilot session
+
+```
+POST /api/chat/session/copilot
+```
+
+Creates a new copilot session for a tab, or returns the existing one.
+
+<ParamField body="envelope" type="object" required>
+  Copilot context envelope.
+  <Expandable title="properties">
+    <ResponseField name="meta" type="object" required>
+      <Expandable title="properties">
+        <ResponseField name="tabId" type="string" required>The SQL console tab ID.</ResponseField>
+        <ResponseField name="connectionId" type="string">Active connection ID.</ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="surface" type="string">
+      Copilot surface context. `sql` for the SQL editor, `table` for the table explorer.
+    </ResponseField>
+    <ResponseField name="context" type="object">
+      Surface-specific context data (database, table name, schema, etc.).
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+## Examples
+
+<CodeGroup>
+
+```bash Send a chat message
+curl -X POST https://your-dory-instance/api/chat \
+  -H "Cookie: <session-cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "msg_001",
+    "messages": [
+      { "id": "msg_001", "role": "user", "parts": [{ "type": "text", "text": "How many rows are in the events table?" }] }
+    ],
+    "connectionId": "conn_abc123",
+    "database": "analytics"
+  }'
+```
+
+```bash Get session
+curl -X GET https://your-dory-instance/api/chat/session/sess_xyz \
+  -H "Cookie: <session-cookie>"
+```
+
+```bash Get copilot session by tab
+curl -X GET "https://your-dory-instance/api/chat/session/copilot?tabId=tab_001" \
+  -H "Cookie: <session-cookie>"
+```
+
+</CodeGroup>
+
+<CodeGroup>
+
+```json session GET 200
+{
+  "ok": true,
+  "data": {
+    "session": {
+      "id": "sess_xyz",
+      "title": "Analytics exploration",
+      "type": "global",
+      "tabId": null,
+      "connectionId": "conn_abc123",
+      "activeDatabase": "analytics",
+      "activeSchema": null,
+      "createdAt": "2024-06-01T10:00:00.000Z",
+      "updatedAt": "2024-06-01T10:05:00.000Z",
+      "archivedAt": null,
+      "lastMessageAt": "2024-06-01T10:05:00.000Z"
+    },
+    "messages": [
+      {
+        "id": "msg_001",
+        "sessionId": "sess_xyz",
+        "userId": "usr_abc",
+        "role": "user",
+        "sequence": 1,
+        "parts": [{ "type": "text", "text": "How many rows are in the events table?" }],
+        "createdAt": "2024-06-01T10:00:05.000Z"
+      }
+    ]
+  }
+}
+```
+
+</CodeGroup>

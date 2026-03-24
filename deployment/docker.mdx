@@ -1,0 +1,184 @@
+---
+title: "Deploy with Docker"
+description: "Run Dory on your own infrastructure with a single Docker command."
+---
+
+The official `dorylab/dory` Docker image bundles the Next.js application, a PGLite database, and a bootstrap migration script into a single container. No external database is required for a single-node deployment.
+
+## Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) installed and running
+- An API key from your chosen AI provider (optional — Copilot features are disabled if omitted)
+- Port `3000` available on the host (or any other port you map to)
+
+## Quick start
+
+<Steps>
+  <Step title="Pull and run the container">
+    Run the following command to start Dory. The `openssl` sub-commands generate secure random secrets automatically.
+
+    ```bash
+    docker run -d --name dory \
+      -p 3000:3000 \
+      -e DS_SECRET_KEY="$(openssl rand -base64 32 | tr -d '\n')" \
+      -e BETTER_AUTH_SECRET="$(openssl rand -hex 32)" \
+      -e BETTER_AUTH_URL="http://localhost:3000" \
+      -e DORY_AI_PROVIDER=openai \
+      -e DORY_AI_MODEL=gpt-4o-mini \
+      -e DORY_AI_API_KEY=your_api_key_here \
+      -e DORY_AI_URL=https://api.openai.com/v1 \
+      dorylab/dory:latest
+    ```
+
+    <Warning>
+      Never reuse the same `DS_SECRET_KEY` or `BETTER_AUTH_SECRET` across environments. These secrets encrypt stored connection credentials and sign authentication tokens. Losing or rotating them will invalidate all existing sessions and stored passwords.
+    </Warning>
+  </Step>
+
+  <Step title="Open Dory">
+    Navigate to [http://localhost:3000](http://localhost:3000). Click **Enter as Demo** to explore immediately — no account required.
+  </Step>
+
+  <Step title="Add a database connection">
+    From the workspace, click **New Connection** and provide the credentials for your ClickHouse, PostgreSQL, or MySQL instance.
+  </Step>
+</Steps>
+
+## Docker Compose example
+
+For a reproducible setup, use a Compose file so environment variables and volumes are version-controlled alongside your infrastructure.
+
+```yaml docker-compose.yml
+services:
+  dory:
+    image: dorylab/dory:latest
+    container_name: dory
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DS_SECRET_KEY: "${DS_SECRET_KEY}"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET}"
+      BETTER_AUTH_URL: "http://localhost:3000"
+      DORY_AI_PROVIDER: openai
+      DORY_AI_MODEL: gpt-4o-mini
+      DORY_AI_API_KEY: "${DORY_AI_API_KEY}"
+      DORY_AI_URL: https://api.openai.com/v1
+    volumes:
+      - dory_data:/data/dory
+
+volumes:
+  dory_data:
+```
+
+Store secrets in a `.env` file next to `docker-compose.yml`:
+
+```bash .env
+DS_SECRET_KEY=<output of: openssl rand -base64 32>
+BETTER_AUTH_SECRET=<output of: openssl rand -hex 32>
+DORY_AI_API_KEY=sk-...
+```
+
+Then start the stack:
+
+```bash
+docker compose up -d
+```
+
+## Volume mounting for data persistence
+
+By default the container stores its PGLite database at `/data/dory` inside the container. Without a volume this data is lost when the container is removed.
+
+Mount a named volume or a host directory:
+
+<CodeGroup>
+
+```bash Named volume
+docker run -d --name dory \
+  -p 3000:3000 \
+  -v dory_data:/data/dory \
+  ... \
+  dorylab/dory:latest
+```
+
+```bash Host directory
+docker run -d --name dory \
+  -p 3000:3000 \
+  -v /opt/dory/data:/data/dory \
+  ... \
+  dorylab/dory:latest
+```
+
+</CodeGroup>
+
+The path `/data/dory` corresponds to the `PGLITE_DB_PATH` environment variable. If you change that variable, update the volume mount path to match.
+
+<Tip>
+  Use an external PostgreSQL database instead of PGLite for production workloads. Set `DB_TYPE=postgres` and `DATABASE_URL=postgresql://user:password@host:5432/dbname`. See [Environment variables](/deployment/environment-variables) for the full reference.
+</Tip>
+
+## Health checks
+
+Docker does not define a `HEALTHCHECK` in the published image. Add one in your Compose file:
+
+```yaml docker-compose.yml
+services:
+  dory:
+    image: dorylab/dory:latest
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+```
+
+## Environment variable reference
+
+The table below covers the variables most relevant to Docker deployments. For the complete list see [Environment variables](/deployment/environment-variables).
+
+| Variable | Required | Description |
+|---|---|---|
+| `DS_SECRET_KEY` | Yes | Encrypts stored connection passwords. Generate with `openssl rand -base64 32`. |
+| `BETTER_AUTH_SECRET` | Yes | Signs authentication tokens. Generate with `openssl rand -hex 32`. |
+| `BETTER_AUTH_URL` | Yes | Public base URL of the Dory instance, e.g. `http://localhost:3000`. |
+| `DORY_AI_PROVIDER` | No | AI provider to use. Defaults to `openai`. |
+| `DORY_AI_MODEL` | No | Model name, e.g. `gpt-4o-mini`. |
+| `DORY_AI_API_KEY` | No | API key for the chosen provider. Copilot features are disabled if omitted. |
+| `DORY_AI_URL` | No | API base URL. Defaults to `https://api.openai.com/v1` for OpenAI. |
+| `DB_TYPE` | No | Application database type: `pglite` (default) or `postgres`. |
+| `PGLITE_DB_PATH` | No | PGLite data directory inside the container. Default: `/data/dory`. |
+| `DATABASE_URL` | No | PostgreSQL connection string. Only used when `DB_TYPE=postgres`. |
+| `TRUSTED_ORIGINS` | No | Comma-separated list of allowed origins for CSRF protection. |
+
+<Warning>
+  The official Docker image sets `DORY_RUNTIME=docker` and `NEXT_PUBLIC_DORY_RUNTIME=docker` automatically. Do not override these values.
+</Warning>
+
+## Upgrading to a new version
+
+<Steps>
+  <Step title="Pull the new image">
+    ```bash
+    docker pull dorylab/dory:latest
+    ```
+  </Step>
+
+  <Step title="Stop and remove the existing container">
+    ```bash
+    docker stop dory && docker rm dory
+    ```
+
+    Your data volume (`dory_data`) is not removed by this step.
+  </Step>
+
+  <Step title="Start a new container">
+    Re-run the original `docker run` command with the same environment variables and volume flags. The bootstrap script runs automatically on startup and applies any pending database migrations.
+  </Step>
+</Steps>
+
+With Docker Compose, the upgrade is a single command:
+
+```bash
+docker compose pull && docker compose up -d
+```

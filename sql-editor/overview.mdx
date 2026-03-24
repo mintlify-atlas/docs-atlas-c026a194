@@ -1,0 +1,153 @@
+---
+title: "SQL editor"
+description: "Multi-tab SQL workspace with result sets, AI copilot integration, and built-in visualizations."
+---
+
+<CardGroup cols={2}>
+  <Card title="Multi-tab workspace" icon="table-columns">
+    Open any number of query tabs per connection. Each tab persists its SQL, name, and last result set.
+  </Card>
+  <Card title="Monaco editor" icon="code">
+    Built on the same engine as VS Code. Syntax highlighting, schema-aware autocomplete, and undo history.
+  </Card>
+  <Card title="Multiple result sets" icon="list">
+    Run a script with several statements. Each statement's result appears in its own numbered tab under the editor.
+  </Card>
+  <Card title="Instant charts" icon="chart-bar">
+    Switch any result set from table view to chart view without leaving the editor.
+  </Card>
+</CardGroup>
+
+## The tab bar
+
+Each open query lives in a tab. Tabs are stored server-side (in the `tabs` table), so they survive page refreshes and reconnects.
+
+A tab record stores:
+
+| Field | Description |
+|---|---|
+| `tabName` | Display name. Defaults to `New Query`. |
+| `tabType` | `sql` for a query tab, `table` for a table-preview tab. |
+| `content` | The raw SQL text. |
+| `orderIndex` | Position in the tab bar. Tabs are draggable to reorder. |
+| `activeSubTab` | Remembers whether you last viewed `data` or another sub-tab. |
+
+### Managing tabs
+
+- **Add a tab** — Click the `+` button at the right end of the tab bar.
+- **Close a tab** — Hover a tab and click the `×` that appears, or right-click and choose **Close**.
+- **Rename a tab** — Right-click and choose **Rename**, or let the AI generate a name from the query content.
+- **Reorder tabs** — Drag a tab to a new position. The new order is persisted immediately.
+- **Close other tabs** — Right-click a tab and choose **Close others**.
+
+<Note>
+  Tabs are scoped to a connection. Switching to a different connection shows that connection's own tab list.
+</Note>
+
+## Running queries
+
+<Steps>
+  <Step title="Write your SQL">
+    Type or paste SQL into the editor. The editor provides schema-aware completions for tables, columns, schemas, and keywords as you type.
+  </Step>
+  <Step title="Run the query">
+    Press the keyboard shortcut or click **Run** in the toolbar. Dory sends the SQL to the connected database and streams the result back.
+  </Step>
+  <Step title="Inspect the results">
+    Results appear in the panel below the editor. Use the **Overview** tab to see all result sets from a multi-statement run, then click into any numbered result.
+  </Step>
+</Steps>
+
+### Keyboard shortcuts
+
+<Tabs>
+  <Tab title="macOS">
+    | Action | Shortcut |
+    |---|---|
+    | Run query | `Cmd + Enter` |
+    | Format SQL | `Cmd + Shift + F` |
+    | Trigger autocomplete | `Ctrl + Space` |
+  </Tab>
+  <Tab title="Windows / Linux">
+    | Action | Shortcut |
+    |---|---|
+    | Run query | `Ctrl + Enter` |
+    | Format SQL | `Ctrl + Shift + F` |
+    | Trigger autocomplete | `Ctrl + Space` |
+  </Tab>
+</Tabs>
+
+<Tip>
+  Select a portion of SQL before pressing the run shortcut to execute only that selection. The editor passes the selected text to the query runner.
+</Tip>
+
+### Cancelling a query
+
+While a query is running, a cancel button replaces the run button. Clicking it sends a cancel request to the server (`POST /api/query/cancel`) and aborts the in-flight network request. The result panel shows `canceled` status.
+
+## Result sets
+
+After a run completes, the result panel shows:
+
+- An **Overview** tab listing every statement executed, its status (`success`, `error`, or `canceled`), row count, and execution time.
+- Numbered **Result** tabs (`Result 1`, `Result 2`, …) — one per statement that returned rows.
+
+The **status bar** below the result table shows:
+
+- Execution time in milliseconds.
+- Number of rows displayed (`X rows shown`).
+- Rows affected for DML statements.
+- A warning badge if a row limit was applied.
+- The SQL text of the active result set (hover to see the full query).
+
+### Row limit
+
+Dory automatically appends a `LIMIT` clause to standalone `SELECT` statements before sending them to the database. The limit value is configurable from the editor settings. The status bar shows an amber warning when a limit is in effect.
+
+### Working with large result sets
+
+The result table uses a virtualized renderer (`VTable`) that can handle millions of rows in the UI without freezing. The default UI row budget is 5 000 000 rows. If the fetched result exceeds this budget, a `truncated` notice appears in the status bar.
+
+Results are cached client-side (in PGLite) across tab switches so switching back to a previous result set does not re-fetch from the server.
+
+## Searching and filtering results
+
+A search bar above the result table filters rows by substring match across all columns. Column-level filters are also available via the filter toolbar — each filter is applied on top of the global search.
+
+## Exporting results
+
+Click the `⋯` menu in the result table toolbar and select **CSV** to download the visible result set. The export runs in a Web Worker to keep the UI responsive. The downloaded file is named `result-<tabId>-<sessionId>-set<n>.csv`.
+
+## Formatting SQL
+
+Dory formats SQL using the `sql-formatter` library. The formatter dialect is selected automatically based on the connection type (for example, ClickHouse SQL vs. standard SQL).
+
+Formatting can be applied to:
+- The **entire editor content** when no text is selected.
+- A **selection only** when text is highlighted.
+
+The format operation is a single undoable step — press `Cmd+Z` / `Ctrl+Z` to revert.
+
+### Toggling case
+
+A **Toggle case** action is available from the right-click context menu. It uppercases the selection (or full content) if any lowercase letters are present; otherwise it lowercases everything.
+
+## The Monaco editor foundation
+
+The SQL editor is a Monaco editor instance (`monaco-editor`). Each tab gets its own editor instance that is created when the tab is first focused and destroyed when the tab is closed.
+
+Theme follows the application's light/dark mode. Two themes are defined — `github-light` and `github-dark` — and the active theme switches automatically when you toggle the app theme.
+
+Editor settings (font size, tab size, word wrap, minimap, and similar Monaco options) are configurable from the editor settings panel and are persisted globally.
+
+## Query execution history
+
+Every query run is tracked as a session. Sessions include:
+
+- The SQL text.
+- Start and finish timestamps.
+- Duration in milliseconds.
+- Status (`success`, `error`, or `canceled`).
+- Row count and rows affected per result set.
+
+Session data is stored in the local PGLite database and is used to populate the Overview panel and status bar.

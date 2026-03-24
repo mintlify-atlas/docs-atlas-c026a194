@@ -1,0 +1,177 @@
+---
+title: "Manage users"
+description: "Create, update, and delete ClickHouse users via API."
+---
+
+<Note>
+  Privileges endpoints require the `x-connection-id` header pointing to a ClickHouse connection. The authenticated user must have sufficient ClickHouse privileges to manage users (`ACCESS MANAGEMENT` or equivalent).
+</Note>
+
+Provides CRUD operations for ClickHouse users. All mutations are executed directly against the connected ClickHouse instance — not Dory's internal user store.
+
+## List users
+
+```
+GET /api/privileges/users
+```
+
+Returns all ClickHouse users visible to the connected identity.
+
+**Headers**
+
+<ParamField header="x-connection-id" type="string" required>
+  Active ClickHouse connection ID.
+</ParamField>
+
+**Response**
+
+<ResponseField name="ok" type="boolean" required>
+  `true` on success.
+</ResponseField>
+
+<ResponseField name="data" type="object[]" required>
+  Array of ClickHouse user objects. Fields are sourced from `system.users`.
+</ResponseField>
+
+---
+
+## Get user
+
+```
+GET /api/privileges/users/{name}
+```
+
+<ParamField path="name" type="string" required>
+  ClickHouse username.
+</ParamField>
+
+Returns a single user record, or `404` if not found.
+
+---
+
+## Create user
+
+```
+POST /api/privileges/users
+```
+
+<ParamField header="x-connection-id" type="string" required>
+  Active ClickHouse connection ID.
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Username for the new ClickHouse user.
+</ParamField>
+
+<ParamField body="password" type="string">
+  Plain-text password. Stored and transmitted according to the ClickHouse authentication method configured.
+</ParamField>
+
+<ParamField body="roles" type="string[]">
+  Default roles to assign to the user.
+</ParamField>
+
+<ParamField body="settings" type="object">
+  ClickHouse user settings to apply at creation.
+</ParamField>
+
+Returns `{ ok: true, data: null }` on success.
+
+---
+
+## Update user
+
+```
+PATCH /api/privileges/users/{name}
+```
+
+<ParamField path="name" type="string" required>
+  ClickHouse username to update.
+</ParamField>
+
+<ParamField body="password" type="string">
+  New password.
+</ParamField>
+
+<ParamField body="roles" type="string[]">
+  Updated role list.
+</ParamField>
+
+<ParamField body="settings" type="object">
+  Updated ClickHouse settings.
+</ParamField>
+
+Returns `{ ok: true, data: null }` on success.
+
+---
+
+## Delete user
+
+```
+DELETE /api/privileges/users/{name}
+```
+
+<ParamField path="name" type="string" required>
+  ClickHouse username to delete.
+</ParamField>
+
+Returns `{ ok: true, data: null }` on success.
+
+## Examples
+
+<CodeGroup>
+
+```bash List users
+curl -X GET https://your-dory-instance/api/privileges/users \
+  -H "Cookie: <session-cookie>" \
+  -H "x-connection-id: conn_ch123"
+```
+
+```bash Create user
+curl -X POST https://your-dory-instance/api/privileges/users \
+  -H "Cookie: <session-cookie>" \
+  -H "x-connection-id: conn_ch123" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "analyst",
+    "password": "secure_password",
+    "roles": ["readonly"]
+  }'
+```
+
+```bash Update user
+curl -X PATCH https://your-dory-instance/api/privileges/users/analyst \
+  -H "Cookie: <session-cookie>" \
+  -H "x-connection-id: conn_ch123" \
+  -H "Content-Type: application/json" \
+  -d '{ "roles": ["readonly", "analyst_role"] }'
+```
+
+```bash Delete user
+curl -X DELETE https://your-dory-instance/api/privileges/users/analyst \
+  -H "Cookie: <session-cookie>" \
+  -H "x-connection-id: conn_ch123"
+```
+
+</CodeGroup>
+
+<CodeGroup>
+
+```json list 200
+{
+  "ok": true,
+  "data": [
+    { "name": "default", "id": "...", "storage": "local_directory" },
+    { "name": "analyst", "id": "...", "storage": "local_directory" }
+  ]
+}
+```
+
+```json create 200
+{
+  "ok": true,
+  "data": null
+}
+```
+
+</CodeGroup>

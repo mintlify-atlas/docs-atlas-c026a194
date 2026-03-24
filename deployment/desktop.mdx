@@ -1,0 +1,105 @@
+---
+title: "Desktop app"
+description: "Download and install the Dory desktop app for macOS or Windows."
+---
+
+The Dory desktop app packages the same web application as the Docker image into a native Electron wrapper. No Docker, no server setup, and no network configuration is required — everything runs locally on your machine.
+
+## Download
+
+All releases are published on GitHub:
+
+<Columns cols={2}>
+  <Card title="macOS" icon="apple" href="https://github.com/dorylab/dory/releases">
+    Download the latest `.dmg` installer for Apple Silicon or Intel.
+  </Card>
+  <Card title="Windows" icon="windows" href="https://github.com/dorylab/dory/releases">
+    Download the latest `.exe` or `.msi` installer.
+  </Card>
+</Columns>
+
+## Installation
+
+<Tabs>
+  <Tab title="macOS">
+    <Steps>
+      <Step title="Download the DMG">
+        Go to [github.com/dorylab/dory/releases](https://github.com/dorylab/dory/releases) and download the `.dmg` file for your architecture (Apple Silicon or Intel).
+      </Step>
+      <Step title="Open the installer">
+        Double-click the downloaded `.dmg` file to mount it. Drag **Dory** to your **Applications** folder.
+      </Step>
+      <Step title="Launch Dory">
+        Open Dory from **Applications** or Spotlight. On first launch macOS may prompt you to confirm opening an app downloaded from the internet — click **Open**.
+      </Step>
+      <Step title="Add your AI API key (optional)">
+        To enable Copilot features, open **Settings → AI** and enter your API key. The desktop app does not require an AI key to connect to databases or run queries.
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Windows">
+    <Steps>
+      <Step title="Download the installer">
+        Go to [github.com/dorylab/dory/releases](https://github.com/dorylab/dory/releases) and download the `.exe` installer.
+      </Step>
+      <Step title="Run the installer">
+        Double-click the downloaded file and follow the setup wizard. Windows SmartScreen may display a warning for unsigned builds — click **More info → Run anyway**.
+      </Step>
+      <Step title="Launch Dory">
+        Open Dory from the Start menu or the desktop shortcut created by the installer.
+      </Step>
+      <Step title="Add your AI API key (optional)">
+        To enable Copilot features, open **Settings → AI** and enter your API key.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## How the desktop runtime works
+
+The desktop app uses the Electron framework to embed the Next.js application and run it as a local server bound to `127.0.0.1` on a dynamically chosen port. The Electron main process:
+
+1. Runs a **bootstrap script** (`bootstrap.mjs`) to apply pending database migrations.
+2. Starts the **Next.js standalone server** on an available local port.
+3. Opens a **browser window** pointing to `http://127.0.0.1:<port>`.
+
+The server is set to `DORY_RUNTIME=desktop` and `NEXT_PUBLIC_DORY_RUNTIME=desktop`. This value is read by `apps/web/lib/runtime/runtime.ts` and gates runtime-specific behaviour such as disabling billing flows and adjusting authentication configuration.
+
+<Note>
+  Unlike the Docker deployment, the desktop app does not expose any port to other machines on your network. The embedded server listens only on `127.0.0.1`.
+</Note>
+
+### Secrets management
+
+The desktop app automatically generates `BETTER_AUTH_SECRET` and `DS_SECRET_KEY` on first launch and stores them in a `desktop-secrets.json` file inside the application's user data directory. You do not need to set these values manually.
+
+### Database
+
+The desktop app always uses PGLite (`DB_TYPE=pglite`). The database path is set by Electron to a subdirectory of the platform's user data folder.
+
+## Local data storage
+
+Dory stores application data (saved queries, connection credentials, user settings) in the platform's standard user data directory:
+
+| Platform | Path |
+|---|---|
+| macOS | `~/Library/Application Support/Dory/` |
+| Windows | `%APPDATA%\Dory\` |
+
+The PGLite database files and the `desktop-secrets.json` secrets file are both written to this directory. Back up this directory to preserve your data.
+
+## Updating the app
+
+The desktop app checks for updates automatically in the background, starting 15 seconds after launch and then every 6 hours while the app is running. It also checks when the window regains focus if more than an hour has passed since the last check.
+
+When an update is available:
+
+- The app silently downloads the update in the background.
+- A notification appears in the toolbar when the download is complete.
+- Click **Restart to update** to apply the update, or let it install automatically the next time you quit the app.
+
+To check for updates manually, open the application menu and choose **Check for Updates**.
+
+<Tip>
+  You can switch between the **stable** and **beta** update channels from the application menu under **Update Channel**. The beta channel gives you access to pre-release builds.
+</Tip>

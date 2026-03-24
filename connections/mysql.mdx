@@ -1,0 +1,148 @@
+---
+title: "MySQL"
+description: "Connect Dory to MySQL databases (Beta)."
+---
+
+<Warning>
+  MySQL support is in Beta. Core SQL editing, schema browsing, and AI copilot features work. Advanced capabilities such as query monitoring and privilege management are not yet available for MySQL.
+</Warning>
+
+## Connection parameters
+
+<ParamField path="body.host" type="string" required>
+  Hostname or IP address of the MySQL server. You can also provide a full `mysql://` or `mysqls://` connection URL — the driver parses it and extracts host, port, database, username, and password. Use `mysqls://` to signal TLS in the URL.
+</ParamField>
+
+<ParamField path="body.port" type="number">
+  MySQL port. Defaults to `3306`.
+</ParamField>
+
+<ParamField path="body.database" type="string">
+  Default database name. If not set, the connection is established without selecting a database.
+</ParamField>
+
+<ParamField path="body.username" type="string" required>
+  MySQL username.
+</ParamField>
+
+<ParamField path="body.password" type="string">
+  MySQL password. Stored encrypted.
+</ParamField>
+
+### Advanced options
+
+Pass these as JSON in the **Options** field:
+
+| Option | Type | Description |
+|---|---|---|
+| `ssl` | boolean or object | `true` enables TLS with `rejectUnauthorized: false`. Pass a full `mysql2` `SslOptions` object for more control. |
+| `request_timeout` | number | Query timeout in milliseconds. Also accepted as `query_timeout`. |
+| `connect_timeout` | number | Connection establishment timeout in milliseconds. Defaults to 20 000 ms. |
+| `charset` | string | MySQL charset (e.g. `utf8mb4`). |
+| `timezone` | string | Session timezone (e.g. `+00:00`, `local`). |
+
+## SSL configuration
+
+The MySQL driver uses `mysql2` under the hood and maps the `ssl` option directly to its `SslOptions`:
+
+```typescript
+// from apps/web/lib/connection/drivers/mysql/mysql-driver.ts
+if (typeof sslOption === 'boolean') {
+    ssl = sslOption ? { rejectUnauthorized: false } : undefined;
+} else if (sslOption && typeof sslOption === 'object') {
+    ssl = sslOption as SslOptions;
+} else if (hostConfig.ssl) {
+    // SSL also detected from mysqls:// URL prefix
+    ssl = { rejectUnauthorized: false };
+}
+```
+
+To use TLS with certificate verification, pass a full `SslOptions` object in the `ssl` field:
+
+```json
+{
+  "ssl": {
+    "rejectUnauthorized": true,
+    "ca": "<PEM-encoded CA certificate>"
+  }
+}
+```
+
+## Connection string format
+
+You can paste a connection URL directly into the **Host** field:
+
+```
+mysql://username:password@hostname:3306/database
+mysqls://hostname/database
+```
+
+The `mysqls://` scheme automatically enables TLS (`rejectUnauthorized: false`). Both `mysql://` and `mariadb://` schemes are recognized.
+
+## Connection pooling
+
+The MySQL driver creates a `mysql2` connection pool with these defaults:
+
+| Setting | Value |
+|---|---|
+| Connection limit | 10 |
+| Queue limit | 0 (unlimited) |
+| Connect timeout | 20 000 ms |
+| Multiple statements | Disabled |
+| Keep-alive | Enabled |
+| Big number support | Enabled (returned as strings) |
+| Date strings | Enabled |
+
+The pool is managed by the Dory datasource pool layer, which pings before reuse and reconnects on failure.
+
+## MySQL cloud services
+
+<Tabs>
+  <Tab title="PlanetScale">
+    PlanetScale uses a MySQL-compatible serverless database over TLS.
+
+    | Field | Value |
+    |---|---|
+    | Host | `aws.connect.psdb.cloud` (or your regional endpoint) |
+    | Port | `3306` |
+    | Database | Your PlanetScale database name |
+    | Username | Your PlanetScale username |
+    | Options | `{"ssl": true}` |
+
+    <Tip>
+      PlanetScale requires TLS. Set `ssl: true` in the connection options.
+    </Tip>
+  </Tab>
+  <Tab title="Amazon RDS MySQL">
+    RDS MySQL instances are typically on private VPCs.
+
+    | Field | Value |
+    |---|---|
+    | Host | Your RDS endpoint (e.g. `mydb.xxxx.us-east-1.rds.amazonaws.com`) |
+    | Port | `3306` |
+    | SSL | `{"ssl": true}` recommended |
+
+    For private RDS instances, configure an [SSH tunnel](/connections/ssh-tunnel) via a bastion host.
+  </Tab>
+  <Tab title="Self-hosted">
+    | Field | Value |
+    |---|---|
+    | Host | IP address or hostname |
+    | Port | `3306` |
+    | SSL | As configured on your MySQL server |
+
+    If the server is on a private network, use an [SSH tunnel](/connections/ssh-tunnel).
+  </Tab>
+</Tabs>
+
+## MariaDB
+
+Dory includes a MariaDB driver that shares the MySQL driver path. The `mariadb://` and `mariadbs://` URL schemes are supported in the host field. Connection parameters are identical to MySQL.
+
+## Known limitations (Beta)
+
+- Query monitoring and metrics dashboards are not available for MySQL connections.
+- Privilege management (user and role UI) is ClickHouse-only at this time.
+- `BIGINT` and `DECIMAL` columns are returned as strings to preserve precision beyond JavaScript's `Number` range.
+- Date columns are returned as strings.
+- Multiple statements in a single query call are disabled for security reasons.

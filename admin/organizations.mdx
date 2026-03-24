@@ -1,0 +1,116 @@
+---
+title: "Organizations"
+description: "Manage teams, members, and shared resources with Dory organizations."
+---
+
+Organizations are the top-level multi-tenant unit in Dory. Every database connection, saved query, and workspace is scoped to an organization. Each user account belongs to one or more organizations and carries a role that controls what they can do within that organization.
+
+<Note>
+  Organizations apply to the **web (Docker) deployment** only. In the desktop app, Dory runs in single-user mode and does not create organizations.
+</Note>
+
+## How organizations work
+
+When a new user signs up via email or a social provider, Dory automatically creates a default organization for that user and assigns them the `owner` role. The organization slug is derived from the user's email and a short ID suffix — for example `janes-workspace-a1b2c3d4`.
+
+All resources in Dory — connections, queries, and workspace data — belong to the active organization. Only members of an organization can access its resources.
+
+## Roles and permissions
+
+Dory uses a four-role model defined in `apps/web/lib/auth/organization-ac.ts`:
+
+| Role | Organization | Members | Invitations | Workspace | Connections |
+|------|-------------|---------|-------------|-----------|-------------|
+| `owner` | read, update, delete | read, create, update, delete | read, create, cancel | read, write | read, create, update, delete |
+| `admin` | read, update | read, create, update, delete | read, create, cancel | read, write | read, create, update, delete |
+| `member` | read | read | read | read, write | read |
+| `viewer` | read | read | read | read | read |
+
+- **owner** — Full control, including deleting the organization and managing billing.
+- **admin** — Can manage members and connections, but cannot delete the organization.
+- **member** — Can read and write workspace data and read connections, but cannot manage members.
+- **viewer** — Read-only access to everything.
+
+<Note>
+  Only the `owner` role can manage billing. Billing access is checked via `canManageOrganizationBilling(role)`, which returns `true` only for `owner`.
+</Note>
+
+## Creating an organization
+
+You can create additional organizations from the organization switcher in the sidebar.
+
+<Steps>
+  <Step title="Open the organization switcher">
+    Click on your current organization name in the sidebar. A dropdown lists all organizations you belong to.
+  </Step>
+  <Step title="Select 'Create organization'">
+    Choose the option to create a new organization.
+  </Step>
+  <Step title="Enter a name and slug">
+    Provide a display name and a URL slug. The slug must be globally unique — it is used to identify the organization in URLs (`/:slug/...`). Slugs are normalized to lowercase alphanumeric characters with hyphens.
+  </Step>
+  <Step title="Confirm">
+    The new organization is created and set as your active organization.
+  </Step>
+</Steps>
+
+## Inviting team members
+
+Owners and admins can invite members by email. Invitations expire after **48 hours** and are sent via email when `BETTER_AUTH_URL` and a mail provider (e.g. `RESEND_API_KEY`) are configured.
+
+<Steps>
+  <Step title="Open organization settings">
+    Navigate to **Settings → Members** within your organization.
+  </Step>
+  <Step title="Enter the invitee's email">
+    Type the email address of the person you want to invite.
+  </Step>
+  <Step title="Select a role">
+    Choose `admin`, `member`, or `viewer`. The invited person receives the selected role upon accepting.
+  </Step>
+  <Step title="Send the invitation">
+    An invitation email is sent containing an acceptance link at `/organization/accept-invitation?invitationId=<id>`.
+  </Step>
+  <Step title="Invitee accepts">
+    The invitee clicks the link. If they do not have an account yet, they must sign up first with the invited email address, then accept the invitation.
+  </Step>
+</Steps>
+
+<Warning>
+  If `BETTER_AUTH_URL` is not set, invitation emails are skipped. You will see a warning in server logs: `missing BETTER_AUTH_URL, skipping invitation email`. The invitation record is still created — share the acceptance link manually if needed.
+</Warning>
+
+To cancel a pending invitation, go to **Settings → Members → Pending invitations** and click **Cancel**.
+
+## Managing member roles
+
+Owners and admins can update a member's role or remove them from the organization.
+
+- **Update role** — Go to **Settings → Members**, find the member, and select a new role from the dropdown. This calls `updateMemberRole` on the Better Auth organization API.
+- **Remove member** — Click **Remove** next to a member. The member loses all access to the organization's resources immediately.
+
+<Warning>
+  Removing a member is immediate and cannot be undone. The member is not notified automatically.
+</Warning>
+
+## Switching between organizations
+
+If your account belongs to more than one organization, use the organization switcher in the sidebar to change the active organization. Switching sets `activeOrganizationId` on the current session.
+
+When a new session is created, Dory automatically resolves the active organization to the first organization the user belongs to. You can also pass `organizationId` or `organizationSlug` as query parameters to API routes that accept them — see `setActiveOrganization` in `apps/web/lib/organization/api.ts`.
+
+## Organization settings
+
+Owners and admins can update the organization **name** and **slug** from **Settings → General**. The slug must remain globally unique. Changing the slug will affect all URLs that include it.
+
+Owners can delete the organization from the same page. Deletion is restricted at the database level — the `ownerUserId` column on the `organizations` table references the `user` table with `onDelete: 'restrict'`.
+
+## Organization-scoped database connections
+
+Every database connection in Dory belongs to the active organization. Members with the `connection:read` permission (all roles) can view connections. Members with `connection:create`, `connection:update`, or `connection:delete` permissions (`owner` and `admin`) can add, edit, or remove connections.
+
+Connections are not shared across organizations. Switching organizations changes which connections are available in the SQL editor.
+
+<Tip>
+  Use the **viewer** role for read-only stakeholders who need to run queries but should not be able to modify connections or settings.
+</Tip>

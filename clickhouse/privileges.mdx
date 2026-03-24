@@ -1,0 +1,191 @@
+---
+title: "ClickHouse privileges"
+description: "Manage ClickHouse users and roles with a native UI — no GRANT SQL required."
+---
+
+<Note>
+  Privileges management is available only for ClickHouse connections. The feature is disabled for PostgreSQL and MySQL connections.
+</Note>
+
+The privileges section provides a visual interface for managing ClickHouse users and roles. You can create, edit, and delete users and roles, configure host restrictions, assign roles, set a default role, and run operations across a cluster — all without writing `CREATE USER`, `ALTER USER`, or `GRANT` statements by hand.
+
+## Requirements
+
+<Warning>
+  The ClickHouse user configured in your Dory connection must have sufficient privileges to query `system.users`, `system.roles`, `system.role_grants`, `system.grants`, and to run `CREATE USER`, `ALTER USER`, `DROP USER`, `CREATE ROLE`, `ALTER ROLE`, and `DROP ROLE`. Without these permissions, operations will fail with an error.
+</Warning>
+
+## Navigating to privileges
+
+Open a ClickHouse connection, then click **Privileges** in the sidebar. The page loads two tabs: **Users** and **Roles**.
+
+## Feature overview
+
+<CardGroup cols={2}>
+  <Card title="User management" icon="user">
+    Create, edit, and delete ClickHouse users. Configure username, password, and allowed client hosts.
+  </Card>
+  <Card title="Role assignment" icon="user-shield">
+    Assign one or more roles to a user and designate a default role that is active on login.
+  </Card>
+  <Card title="Role management" icon="shield-halved">
+    Create, edit, and delete roles. Configure grant-level privileges per database and table.
+  </Card>
+  <Card title="Cluster support" icon="server">
+    Propagate user and role operations to all nodes in a cluster using `ON CLUSTER`.
+  </Card>
+</CardGroup>
+
+## Users tab
+
+The Users tab lists all ClickHouse users returned by the `system.users` system table. Each row shows the username, authentication type, allowed hosts, granted roles, and default role.
+
+### Creating a user
+
+<Steps>
+  <Step title="Open the create dialog">
+    Click **New user** in the top-right corner of the Users tab.
+  </Step>
+  <Step title="Enter a username">
+    Type a username in the **Name** field. This becomes the ClickHouse user identifier.
+  </Step>
+  <Step title="Set a password">
+    Enter a password in the **Password** field. Leave it empty to create a user with no password (not recommended for production).
+  </Step>
+  <Step title="Configure allowed hosts">
+    Enter one or more IP addresses or hostnames in the **Allowed hosts** field, separated by commas. Leave it empty to allow connections from any host (`IDENTIFIED WITH sha256_password BY '...' HOST ANY`).
+  </Step>
+  <Step title="Assign roles">
+    Select one or more roles from the **Roles** multi-select. Only roles that already exist in ClickHouse are listed.
+  </Step>
+  <Step title="Set a default role (optional)">
+    Choose a **Default role** from the dropdown. The default role must be one of the assigned roles. It is activated automatically when the user logs in.
+  </Step>
+  <Step title="Enable On Cluster (optional)">
+    Toggle **On Cluster** if you want the operation to propagate to all nodes in a ClickHouse cluster. Select the target cluster from the dropdown. Available clusters are loaded from `system.clusters`.
+  </Step>
+  <Step title="Save">
+    Click **Create**. Dory sends a `POST /api/privileges/users` request and refreshes the user list on success.
+  </Step>
+</Steps>
+
+### Editing a user
+
+Click the edit icon on any user row to open the edit dialog. All fields are pre-populated with the current user configuration.
+
+- **Username** — you can rename a user. Dory sends a `newName` field in the update payload.
+- **Password** — the field is pre-filled with a placeholder (`********`). Dory only updates the password if you change the field. To remove a password, clear the field entirely.
+- **Allowed hosts** — edit the comma-separated list of hosts. An empty field sets `HOST ANY`.
+- **Roles** and **Default role** — add or remove role assignments. Removing a role that was set as the default role automatically clears the default role selection.
+- **On Cluster** — enable to propagate the change cluster-wide.
+
+Click **Save changes** to submit. Dory sends a `PATCH /api/privileges/users/:name` request.
+
+### Deleting a user
+
+Click the delete icon on any user row. A confirmation dialog appears showing the username. Click **Confirm delete** to permanently remove the user. This action is irreversible.
+
+<Warning>
+  Deleting a user also removes all their role grants in ClickHouse. This cannot be undone from within Dory.
+</Warning>
+
+## Roles tab
+
+The Roles tab lists all ClickHouse roles returned by the `system.roles` system table. Each row shows the role name and its configured privileges.
+
+### Creating a role
+
+<Steps>
+  <Step title="Open the create dialog">
+    Click **New role** in the top-right corner of the Roles tab.
+  </Step>
+  <Step title="Enter a role name">
+    Type a name in the **Name** field.
+  </Step>
+  <Step title="Configure privileges">
+    Add one or more privilege entries. Each entry has:
+    - **Privilege** — the ClickHouse privilege keyword (e.g. `SELECT`, `INSERT`, `ALTER`). The value is uppercased automatically.
+    - **Database** — the target database. Use `*` to match all databases.
+    - **Table** — the target table. Use `*` to match all tables in the database.
+    - **Columns** — an optional comma-separated list of column names to restrict the privilege to specific columns.
+    - **Grant option** — toggle to allow the role holder to grant this privilege to others.
+
+    Click **Add privilege** to add another row. Click the trash icon to remove a row.
+  </Step>
+  <Step title="Enable On Cluster (optional)">
+    Toggle **On Cluster** to propagate the role to all cluster nodes. Select the target cluster.
+  </Step>
+  <Step title="Save">
+    Click **Create**. Dory sends a `POST /api/privileges/roles` request and refreshes the role list.
+  </Step>
+</Steps>
+
+### Editing a role
+
+Click the edit icon on any role row. The dialog pre-populates with the current role name and its privilege list.
+
+- **Name** — you can rename a role. Dory sends a `newName` field in the update payload.
+- **Privileges** — add, remove, or modify privilege entries. The privilege, database, table, columns, and grant option fields are all editable.
+- **On Cluster** — enable to propagate the change cluster-wide.
+
+Click **Save changes** to submit. Dory sends a `PATCH /api/privileges/roles/:name` request.
+
+### Deleting a role
+
+Click the delete icon on any role row. Confirm in the dialog that appears. Dory sends a `DELETE /api/privileges/roles/:name` request.
+
+<Warning>
+  Deleting a role revokes it from all users it was granted to. ClickHouse handles this automatically, but the effect is immediate and cannot be undone from within Dory.
+</Warning>
+
+## Cluster-level operations
+
+Both the user and role dialogs include an **On Cluster** toggle. When enabled, Dory appends `ON CLUSTER <cluster_name>` to the underlying `CREATE`, `ALTER`, and `DROP` statements.
+
+Available clusters are loaded from `system.clusters` via `GET /api/privileges/clusters`. If no clusters are found, the toggle is disabled.
+
+<Note>
+  On Cluster operations require that the ClickHouse user in your Dory connection has the necessary privileges on all nodes. If any node rejects the operation, ClickHouse returns an error.
+</Note>
+
+## API routes
+
+The privileges section uses the following internal API routes. All routes require an `X-Connection-ID` header identifying the ClickHouse connection.
+
+<Tabs>
+  <Tab title="Users">
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/privileges/users` | List all ClickHouse users |
+| `POST` | `/api/privileges/users` | Create a new user |
+| `GET` | `/api/privileges/users/:name` | Get a single user by name |
+| `PATCH` | `/api/privileges/users/:name` | Update a user (rename, password, hosts, roles) |
+| `DELETE` | `/api/privileges/users/:name` | Delete a user |
+
+Create and update payloads include: `name`, `password`, `allowAllHosts`, `allowedClientHosts`, `roles`, `defaultRoles`, and optionally `cluster`.
+
+  </Tab>
+  <Tab title="Roles">
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/privileges/roles` | List all ClickHouse roles |
+| `POST` | `/api/privileges/roles` | Create a new role |
+| `GET` | `/api/privileges/roles/:name` | Get a single role by name |
+| `PATCH` | `/api/privileges/roles/:name` | Update a role (rename, privileges) |
+| `DELETE` | `/api/privileges/roles/:name` | Delete a role |
+
+Create and update payloads include: `name`, `privileges` (array of `{ privilege, database, table, columns, grantOption }`), and optionally `cluster`.
+
+  </Tab>
+  <Tab title="Clusters">
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/privileges/clusters` | List available cluster names from `system.clusters` |
+
+  </Tab>
+</Tabs>
+
+All routes return errors with `400` if the connection is not a ClickHouse connection, `404` if a user or role is not found, and `500` for unexpected ClickHouse errors.

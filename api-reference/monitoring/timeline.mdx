@@ -1,0 +1,112 @@
+---
+title: "Query timeline"
+description: "Retrieve query throughput timeline data (QPM)."
+---
+
+<Note>
+  Requires the `x-connection-id` header pointing to a ClickHouse connection with `queryInsights` capability.
+</Note>
+
+Returns time-series data for query throughput and latency over the selected time window. Use this to render QPM (queries per minute) and latency trend charts in monitoring dashboards.
+
+## Endpoint
+
+```
+POST /api/monitoring/timeline
+```
+
+## Headers
+
+<ParamField header="x-connection-id" type="string" required>
+  ID of the active ClickHouse connection.
+</ParamField>
+
+## Request body
+
+<ParamField body="filters" type="object">
+  Query insight filters.
+  <Expandable title="properties">
+    <ResponseField name="timeRange" type="string" default="1h">
+      Time window for the timeline. One of `1h`, `6h`, `24h`, `7d`. The bucket granularity is determined server-side based on this value.
+    </ResponseField>
+    <ResponseField name="user" type="string" default="all">
+      Filter by ClickHouse username.
+    </ResponseField>
+    <ResponseField name="database" type="string" default="all">
+      Filter by database name.
+    </ResponseField>
+    <ResponseField name="queryType" type="string" default="all">
+      Filter by query type. One of `all`, `select`, `insert`, `ddl`, `other`.
+    </ResponseField>
+    <ResponseField name="minDurationMs" type="number" default="0">
+      Minimum query duration in milliseconds to include.
+    </ResponseField>
+    <ResponseField name="search" type="string" default="">
+      Free-text search string.
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+## Response
+
+<ResponseField name="ok" type="boolean" required>
+  `true` on success.
+</ResponseField>
+
+<ResponseField name="data" type="object[]" required>
+  Array of timeline data points. Returns an empty array `[]` if no data is available. Each point typically includes:
+  <Expandable title="data point fields">
+    <ResponseField name="time" type="string">
+      Bucket timestamp in ISO 8601 format.
+    </ResponseField>
+    <ResponseField name="count" type="number">
+      Number of queries in this time bucket.
+    </ResponseField>
+    <ResponseField name="avgDurationMs" type="number">
+      Average query duration in milliseconds for this bucket.
+    </ResponseField>
+    <ResponseField name="errorCount" type="number">
+      Number of failed queries in this bucket.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+```bash
+curl -X POST https://your-dory-instance/api/monitoring/timeline \
+  -H "Cookie: <session-cookie>" \
+  -H "x-connection-id: conn_ch123" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filters": {
+      "timeRange": "6h"
+    }
+  }'
+```
+
+```json 200
+{
+  "ok": true,
+  "data": [
+    {
+      "time": "2024-06-01T04:00:00.000Z",
+      "count": 142,
+      "avgDurationMs": 198,
+      "errorCount": 2
+    },
+    {
+      "time": "2024-06-01T05:00:00.000Z",
+      "count": 310,
+      "avgDurationMs": 251,
+      "errorCount": 5
+    },
+    {
+      "time": "2024-06-01T06:00:00.000Z",
+      "count": 489,
+      "avgDurationMs": 312,
+      "errorCount": 11
+    }
+  ]
+}
+```

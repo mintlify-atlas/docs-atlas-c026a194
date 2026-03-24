@@ -1,0 +1,174 @@
+---
+title: "Create connection"
+description: "Create a new database connection."
+---
+
+<Note>
+  Requires a managed organization context. The authenticated user must have write access to the organization. The endpoint also supports `PATCH /api/connection?id={id}` to update an existing connection and `DELETE /api/connection?id={id}` to delete one.
+</Note>
+
+Creates a new database connection record in the organization. After creation, a sync operation is enqueued to propagate the connection to cloud storage if applicable.
+
+## Endpoint
+
+```
+POST /api/connection
+```
+
+## Request body
+
+<ParamField body="name" type="string" required>
+  Human-readable connection name. Must be unique within the organization.
+</ParamField>
+
+<ParamField body="type" type="string" required>
+  Connection type. One of `clickhouse`, `doris`, `mariadb`, `mysql`, `postgres`.
+</ParamField>
+
+<ParamField body="engine" type="string" required>
+  Database engine label. Typically matches `type`.
+</ParamField>
+
+<ParamField body="host" type="string" required>
+  Database host or IP address.
+</ParamField>
+
+<ParamField body="port" type="number" required>
+  Database port. Must be between 1 and 65535.
+</ParamField>
+
+<ParamField body="httpPort" type="number">
+  Optional HTTP port for databases that support an HTTP interface (e.g. ClickHouse). Must be between 1 and 65535.
+</ParamField>
+
+<ParamField body="database" type="string">
+  Default database name to connect to.
+</ParamField>
+
+<ParamField body="description" type="string">
+  Optional free-text description.
+</ParamField>
+
+<ParamField body="environment" type="string" default="">
+  Environment label. Common values: `dev`, `staging`, `prod`, `personal`, `shared`.
+</ParamField>
+
+<ParamField body="tags" type="string" default="">
+  Comma-separated tag string.
+</ParamField>
+
+<ParamField body="options" type="string" default="{}">
+  JSON-serialized extended configuration object for driver-specific settings.
+</ParamField>
+
+<ParamField body="status" type="string" default="draft">
+  Initial status. One of `draft`, `ready`, `error`, `disabled`.
+</ParamField>
+
+## Update a connection
+
+```
+PATCH /api/connection?id={connectionId}
+```
+
+The request body accepts the same fields as `POST`. The `id` may also be included in the body if not provided as a query parameter.
+
+## Delete a connection
+
+```
+DELETE /api/connection?id={connectionId}
+```
+
+Soft-deletes the connection and enqueues a delete sync operation.
+
+<ParamField query="id" type="string" required>
+  ID of the connection to delete.
+</ParamField>
+
+## Response
+
+<ResponseField name="ok" type="boolean" required>
+  `true` when the connection was created successfully.
+</ResponseField>
+
+<ResponseField name="data" type="object" required>
+  The created connection record.
+  <Expandable title="properties">
+    <ResponseField name="connection" type="object" required>
+      The full connection record. See [List connections](/api-reference/connections/list) for field descriptions.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash Create connection
+curl -X POST https://your-dory-instance/api/connection \
+  -H "Cookie: <session-cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Analytics ClickHouse",
+    "type": "clickhouse",
+    "engine": "clickhouse",
+    "host": "ch.example.com",
+    "port": 9000,
+    "httpPort": 8123,
+    "database": "analytics",
+    "environment": "prod",
+    "tags": "analytics,reporting"
+  }'
+```
+
+```bash Update connection
+curl -X PATCH "https://your-dory-instance/api/connection?id=conn_abc123" \
+  -H "Cookie: <session-cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "Analytics ClickHouse (updated)", "status": "ready" }'
+```
+
+```bash Delete connection
+curl -X DELETE "https://your-dory-instance/api/connection?id=conn_abc123" \
+  -H "Cookie: <session-cookie>"
+```
+
+</CodeGroup>
+
+<CodeGroup>
+
+```json 201 created
+{
+  "ok": true,
+  "data": {
+    "connection": {
+      "id": "conn_abc123",
+      "name": "Analytics ClickHouse",
+      "type": "clickhouse",
+      "engine": "clickhouse",
+      "host": "ch.example.com",
+      "port": 9000,
+      "httpPort": 8123,
+      "database": "analytics",
+      "status": "draft",
+      "environment": "prod",
+      "tags": "analytics,reporting",
+      "options": "{}",
+      "syncStatus": "queued_create",
+      "createdAt": "2024-06-01T10:00:00.000Z",
+      "updatedAt": "2024-06-01T10:00:00.000Z"
+    }
+  }
+}
+```
+
+```json 200 delete
+{
+  "ok": true,
+  "data": {
+    "deleted": ["conn_abc123"]
+  }
+}
+```
+
+</CodeGroup>

@@ -1,0 +1,204 @@
+---
+title: "Test connection"
+description: "Test a database connection without saving it."
+---
+
+<Note>
+  This endpoint opens a real connection to the target database and immediately closes it. It does not save any credentials or modify stored connection records, though it does update the `lastCheckStatus` fields on an existing connection record if a `connection.id` is provided in the payload.
+</Note>
+
+Tests whether the provided connection parameters can reach the target database. Use this before saving a new connection or to validate credentials.
+
+There is also a separate `POST /api/connection/connect` endpoint that establishes a persistent pool connection against an already-saved connection record.
+
+## Endpoint
+
+```
+POST /api/connection/test
+```
+
+## Request body
+
+<ParamField body="connection" type="object">
+  Partial connection record. If `connection.id` is provided, the last-check fields on the stored record are updated after the test.
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">
+      Optional ID of an existing saved connection.
+    </ResponseField>
+    <ResponseField name="host" type="string">
+      Database host.
+    </ResponseField>
+    <ResponseField name="port" type="number">
+      Database port.
+    </ResponseField>
+    <ResponseField name="database" type="string">
+      Database name.
+    </ResponseField>
+    <ResponseField name="type" type="string">
+      Connection type. One of `clickhouse`, `doris`, `mariadb`, `mysql`, `postgres`.
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="identity" type="object" required>
+  Credentials used to authenticate the test connection.
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">
+      Optional ID of a saved identity. Used to look up the stored encrypted password when `password` is not provided.
+    </ResponseField>
+    <ResponseField name="username" type="string" required>
+      Database username.
+    </ResponseField>
+    <ResponseField name="password" type="string">
+      Plain-text password. If omitted and `id` is provided, the stored password is used.
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="ssh" type="object">
+  Optional SSH tunnel configuration.
+  <Expandable title="properties">
+    <ResponseField name="enabled" type="boolean">
+      Whether to use an SSH tunnel.
+    </ResponseField>
+    <ResponseField name="host" type="string">
+      SSH host.
+    </ResponseField>
+    <ResponseField name="port" type="number">
+      SSH port.
+    </ResponseField>
+    <ResponseField name="username" type="string">
+      SSH username.
+    </ResponseField>
+    <ResponseField name="authMethod" type="string">
+      Authentication method. One of `password`, `private_key`, `agent`.
+    </ResponseField>
+    <ResponseField name="password" type="string">
+      SSH password (for `password` auth method).
+    </ResponseField>
+    <ResponseField name="privateKey" type="string">
+      SSH private key content (for `private_key` auth method).
+    </ResponseField>
+    <ResponseField name="passphrase" type="string">
+      Passphrase for the private key.
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="timeout" type="number">
+  Connection attempt timeout in milliseconds. Defaults to the system connection timeout.
+</ParamField>
+
+## Response
+
+The response always returns HTTP `200`. Check `ok` in the response body to determine success or failure.
+
+<ResponseField name="ok" type="boolean" required>
+  `true` when the connection succeeded.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Health info on success.
+  <Expandable title="properties">
+    <ResponseField name="tookMs" type="number">
+      Round-trip latency in milliseconds.
+    </ResponseField>
+    <ResponseField name="status" type="string">
+      `ok` on success.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="error" type="object">
+  Error details when `ok` is `false`.
+  <Expandable title="properties">
+    <ResponseField name="code" type="string">
+      Error code.
+    </ResponseField>
+    <ResponseField name="message" type="string">
+      Human-readable error message. Common values include missing host, missing username, missing password, missing SSH credentials, or a driver-level connection error.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Establish a pooled connection
+
+```
+POST /api/connection/connect
+```
+
+Establishes (or refreshes) a persistent connection pool for a saved connection. Unlike `/test`, this endpoint requires an existing connection record and keeps the pool alive for subsequent query requests.
+
+<ParamField body="connectionId" type="string" required>
+  ID of the saved connection to connect.
+</ParamField>
+
+<ParamField body="identityId" type="string">
+  Optional ID of the identity to use. Falls back to the default identity if omitted.
+</ParamField>
+
+## Examples
+
+<CodeGroup>
+
+```bash Test connection
+curl -X POST https://your-dory-instance/api/connection/test \
+  -H "Cookie: <session-cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "connection": {
+      "host": "ch.example.com",
+      "port": 9000,
+      "type": "clickhouse"
+    },
+    "identity": {
+      "username": "default",
+      "password": "secret"
+    },
+    "timeout": 5000
+  }'
+```
+
+```bash Connect saved connection
+curl -X POST https://your-dory-instance/api/connection/connect \
+  -H "Cookie: <session-cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{ "connectionId": "conn_abc123" }'
+```
+
+</CodeGroup>
+
+<CodeGroup>
+
+```json 200 success
+{
+  "ok": true,
+  "data": {
+    "tookMs": 38,
+    "status": "ok"
+  }
+}
+```
+
+```json 200 failure
+{
+  "ok": false,
+  "error": {
+    "code": "ERROR",
+    "message": "Connection refused at ch.example.com:9000"
+  }
+}
+```
+
+```json connect 200
+{
+  "ok": true,
+  "data": {
+    "connectionId": "conn_abc123",
+    "identityId": "ident_xyz",
+    "status": "Connected"
+  }
+}
+```
+
+</CodeGroup>

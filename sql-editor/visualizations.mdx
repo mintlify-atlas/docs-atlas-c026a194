@@ -1,0 +1,145 @@
+---
+title: "Query visualizations"
+description: "Transform query results into charts and visualizations instantly."
+---
+
+After running a query, every result set can be viewed as a chart without writing any additional code. Dory analyzes the result columns, picks a sensible default chart configuration, and renders the chart immediately.
+
+## Switching to chart view
+
+<Steps>
+  <Step title="Run a query">
+    Execute any query that returns rows. Results appear in the result panel below the editor.
+  </Step>
+  <Step title="Select a result set">
+    If the query contained multiple statements, click the numbered result tab (`Result 1`, `Result 2`, …) that you want to visualize.
+  </Step>
+  <Step title="Click Charts">
+    In the result panel toolbar, click **Charts** (next to **Table**). Dory switches the view and auto-selects chart axes based on column types.
+  </Step>
+  <Step title="Adjust axes and chart type">
+    Use the control bar at the top of the chart area to change the chart type, X axis column, Y metric, and grouping column.
+  </Step>
+</Steps>
+
+<Note>
+  Switching between **Table** and **Charts** is per result-set, not per tab. The selection is persisted so it survives tab switches within the same session.
+</Note>
+
+## Chart types
+
+Dory supports six chart types. Use the **Chart** selector in the control bar to switch between them.
+
+### Bar chart
+
+Plots a categorical or date X axis against a numeric Y metric. Supports stacked bars when a **Group** column is set. Up to 5 group series are shown; remaining values are collapsed into an **Others** series.
+
+### Line chart
+
+Connects data points with lines. Best suited for time-series data. When the X axis column is detected as a date or timestamp, Dory automatically buckets the data to a sensible granularity (minute, hour, day, week, or month) to keep the chart readable. Supports grouping into multiple lines.
+
+### Pie chart
+
+Shows proportional distribution of a numeric metric across categorical X values. Grouping and timeline slider are not available for pie charts. Each slice maps to one distinct X value.
+
+### Scatter plot
+
+Plots individual data points as dots with a categorical X axis and a numeric Y axis. Useful for spotting distribution and outliers. Grouping is not available for scatter charts.
+
+### Histogram
+
+A frequency distribution chart. The Y axis is always **Count** (the number of rows in each bucket). The X axis column determines the bins. Numeric columns are auto-binned into up to 20 equal-width buckets. Grouping is not available for histograms.
+
+### Heatmap
+
+Displays a grid where rows are X axis values and columns are series (group values). Cell color intensity reflects the metric magnitude relative to the overall min/max. Useful for comparing a metric across two categorical dimensions.
+
+## Configuring axes
+
+The control bar at the top of the chart area exposes four controls:
+
+| Control | Description |
+|---|---|
+| **Chart** | Chart type selector: Bar, Line, Pie, Scatter Plot, Histogram, Heatmap. |
+| **X** | The column to use as the horizontal axis or category dimension. |
+| **Y** | The metric (aggregation) to plot on the vertical axis. |
+| **Group** | An optional second categorical column to split the data into series. Not available for Pie, Scatter, and Histogram. |
+
+### Metric options (Y axis)
+
+The Y picker lists aggregation functions available for the result columns:
+
+| Metric | Description |
+|---|---|
+| **Count** | Count all rows per X bucket. |
+| **Sum(col)** | Sum numeric values. |
+| **Avg(col)** | Average numeric values. |
+| **Max(col)** | Maximum value. |
+| **Min(col)** | Minimum value. |
+| **Count Distinct(col)** | Count distinct non-null values. |
+| **Count(col)** | Count rows where a boolean-like column is true. |
+
+Dory automatically identifies which columns are numeric, date, or categorical and offers only the metrics that apply to each column.
+
+## Auto-configuration
+
+When you first switch to chart view, Dory picks axes automatically:
+
+1. If the result contains a **date/timestamp column** and a **numeric column**, it selects a line chart with the date column on X and the numeric column's sum on Y.
+2. If there is a **categorical column** and a **numeric column** but no date, it selects a bar chart.
+3. If only a numeric column is present, it defaults to a bar chart counting rows.
+
+Column kind is inferred from column names and data values. For example, columns named `created_at`, `timestamp`, or `date` are detected as date columns. Columns where ≥ 80% of non-null values are numeric are classified as numeric.
+
+To reset to the auto-configuration after manual changes, click the **Reset** button (rotate-left icon) in the control bar.
+
+## Filtering by clicking a chart
+
+For bar, scatter, pie, heatmap, and histogram charts, clicking a bar, slice, dot, or cell applies a filter to the underlying result table. The filter appears in the table's filter bar. Hold **Shift** while clicking to append a filter instead of replacing the current one.
+
+## Timeline slider
+
+Bar, line, and histogram charts support a **timeline slider** (DataZoom). Enable it from the chart **Settings** (gear icon in the control bar). When enabled:
+
+- A brush control appears below the chart. Drag the handles to zoom into a date or value range.
+- **Reset Zoom** clears the brush selection.
+- **Apply Brush Filter** pushes the brush range as a filter to the result table.
+
+## Color presets
+
+Six color palettes are available in the chart **Settings** panel:
+
+| Preset | Primary color |
+|---|---|
+| Blue | `#2563eb` (default) |
+| Emerald | `#059669` |
+| Amber | `#d97706` |
+| Rose | `#e11d48` |
+| Violet | `#7c3aed` |
+| Slate | `#334155` |
+
+Each preset ships separate light-mode and dark-mode color arrays so charts remain readable in both themes.
+
+## Exporting charts
+
+Click the **Download** icon (down-arrow) in the control bar to export the chart. Three formats are available:
+
+| Format | Description |
+|---|---|
+| **Copy PNG** | Copies a PNG image of the chart to the clipboard. |
+| **PNG** | Downloads a PNG file. |
+| **SVG** | Downloads an SVG file. |
+
+<Tip>
+  To export the underlying data as a spreadsheet, switch back to **Table** view and use the **CSV** download in the result table toolbar.
+</Tip>
+
+## Data bucketing for large result sets
+
+When an X axis column has more than 30 distinct values, Dory automatically buckets the data:
+
+- **Date columns** — bucketed to minute, hour, day, week, or month granularity (whichever fits within 30 buckets).
+- **Numeric columns** — split into up to 20 equal-width bins.
+- **Category columns** — top 20 categories by metric value are shown; the rest are grouped into **Others**.
+
+The active bucketing strategy is shown as a hint label next to the axis controls (for example, `Auto-bucketed to 12 groups`).

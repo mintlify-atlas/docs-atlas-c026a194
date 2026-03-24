@@ -1,0 +1,157 @@
+---
+title: "Manage roles"
+description: "Create, update, and delete ClickHouse roles via API."
+---
+
+<Note>
+  Privileges endpoints require the `x-connection-id` header pointing to a ClickHouse connection. The authenticated user must have sufficient ClickHouse privileges to manage roles (`ACCESS MANAGEMENT` or equivalent).
+</Note>
+
+Provides CRUD operations for ClickHouse roles. All mutations are executed directly against the connected ClickHouse instance.
+
+## List roles
+
+```
+GET /api/privileges/roles
+```
+
+Returns all ClickHouse roles visible to the connected identity.
+
+**Headers**
+
+<ParamField header="x-connection-id" type="string" required>
+  Active ClickHouse connection ID.
+</ParamField>
+
+**Response**
+
+<ResponseField name="ok" type="boolean" required>
+  `true` on success.
+</ResponseField>
+
+<ResponseField name="data" type="object[]" required>
+  Array of ClickHouse role objects sourced from `system.roles`.
+</ResponseField>
+
+---
+
+## Get role
+
+```
+GET /api/privileges/roles/{name}
+```
+
+<ParamField path="name" type="string" required>
+  ClickHouse role name.
+</ParamField>
+
+Returns a single role record, or `404` if not found.
+
+---
+
+## Create role
+
+```
+POST /api/privileges/roles
+```
+
+<ParamField header="x-connection-id" type="string" required>
+  Active ClickHouse connection ID.
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Name for the new ClickHouse role.
+</ParamField>
+
+<ParamField body="settings" type="object">
+  ClickHouse settings to associate with this role.
+</ParamField>
+
+Returns `{ ok: true, data: null }` on success.
+
+---
+
+## Update role
+
+```
+PATCH /api/privileges/roles/{name}
+```
+
+<ParamField path="name" type="string" required>
+  ClickHouse role name to update.
+</ParamField>
+
+<ParamField body="settings" type="object">
+  Updated ClickHouse settings.
+</ParamField>
+
+Returns `{ ok: true, data: null }` on success.
+
+---
+
+## Delete role
+
+```
+DELETE /api/privileges/roles/{name}
+```
+
+<ParamField path="name" type="string" required>
+  ClickHouse role name to delete.
+</ParamField>
+
+Returns `{ ok: true, data: null }` on success.
+
+## Examples
+
+<CodeGroup>
+
+```bash List roles
+curl -X GET https://your-dory-instance/api/privileges/roles \
+  -H "Cookie: <session-cookie>" \
+  -H "x-connection-id: conn_ch123"
+```
+
+```bash Create role
+curl -X POST https://your-dory-instance/api/privileges/roles \
+  -H "Cookie: <session-cookie>" \
+  -H "x-connection-id: conn_ch123" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "analyst_role" }'
+```
+
+```bash Update role
+curl -X PATCH https://your-dory-instance/api/privileges/roles/analyst_role \
+  -H "Cookie: <session-cookie>" \
+  -H "x-connection-id: conn_ch123" \
+  -H "Content-Type: application/json" \
+  -d '{ "settings": { "max_memory_usage": 10000000000 } }'
+```
+
+```bash Delete role
+curl -X DELETE https://your-dory-instance/api/privileges/roles/analyst_role \
+  -H "Cookie: <session-cookie>" \
+  -H "x-connection-id: conn_ch123"
+```
+
+</CodeGroup>
+
+<CodeGroup>
+
+```json list 200
+{
+  "ok": true,
+  "data": [
+    { "name": "readonly", "id": "...", "storage": "local_directory" },
+    { "name": "analyst_role", "id": "...", "storage": "local_directory" }
+  ]
+}
+```
+
+```json create 200
+{
+  "ok": true,
+  "data": null
+}
+```
+
+</CodeGroup>

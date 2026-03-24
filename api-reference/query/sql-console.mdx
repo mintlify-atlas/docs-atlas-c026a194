@@ -1,0 +1,280 @@
+---
+title: "SQL console"
+description: "Manage SQL console tabs and session state."
+---
+
+<Note>
+  All SQL console endpoints require the `x-connection-id` header in addition to an authenticated session. Tab state is scoped to the combination of user, connection, and tab ID.
+</Note>
+
+The SQL console API manages editor tab state and saved queries. Tab state includes the SQL content, active database, sub-tab selection, and result metadata. Saved queries are persistent named SQL snippets associated with a connection.
+
+## Tab state
+
+### Get all tabs
+
+```
+GET /api/sql-console/tabs
+```
+
+Returns all tab states for the current user and connection.
+
+**Headers**
+
+<ParamField header="x-connection-id" type="string" required>
+  Active connection ID.
+</ParamField>
+
+**Response**
+
+```json
+{ "code": 1, "data": [ /* tab state objects */ ] }
+```
+
+---
+
+### Save tab state
+
+```
+POST /api/sql-console/tabs
+```
+
+Creates or replaces a tab state.
+
+**Headers**
+
+<ParamField header="x-connection-id" type="string" required>
+  Active connection ID.
+</ParamField>
+
+**Request body**
+
+<ParamField body="tabId" type="string" required>
+  Unique tab identifier. Must match `state.tabId`.
+</ParamField>
+
+<ParamField body="state" type="object" required>
+  Tab state object.
+  <Expandable title="properties">
+    <ResponseField name="tabId" type="string" required>
+      Must match the top-level `tabId`.
+    </ResponseField>
+    <ResponseField name="tabType" type="string" required>
+      Tab type. Common values: `sql`, `table`.
+    </ResponseField>
+    <ResponseField name="tabName" type="string">
+      Display name for the tab.
+    </ResponseField>
+    <ResponseField name="content" type="string">
+      SQL text content (for `sql` tabs).
+    </ResponseField>
+    <ResponseField name="databaseName" type="string">
+      Active database (for `table` tabs).
+    </ResponseField>
+    <ResponseField name="tableName" type="string">
+      Active table (for `table` tabs).
+    </ResponseField>
+    <ResponseField name="activeSubTab" type="string">
+      Active sub-tab for table tabs. Defaults to `data`.
+    </ResponseField>
+    <ResponseField name="orderIndex" type="number">
+      Display order index.
+    </ResponseField>
+    <ResponseField name="createdAt" type="string">
+      ISO 8601 creation timestamp.
+    </ResponseField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="resultMeta" type="object">
+  Optional metadata about the last query result for this tab.
+</ParamField>
+
+---
+
+### Update tab state
+
+```
+PATCH /api/sql-console/tabs
+```
+
+Partially updates a tab state. Accepts the same `tabId` and `state` fields as `POST`. Also updates the tab name via `state.tabName`.
+
+---
+
+### Delete a tab
+
+```
+DELETE /api/sql-console/tabs?tabId={tabId}
+```
+
+<ParamField query="tabId" type="string" required>
+  ID of the tab to delete.
+</ParamField>
+
+---
+
+## Saved queries
+
+### List or get saved queries
+
+```
+GET /api/sql-console/saved-queries
+GET /api/sql-console/saved-queries?id={savedQueryId}
+```
+
+<ParamField header="x-connection-id" type="string" required>
+  Active connection ID.
+</ParamField>
+
+<ParamField query="id" type="string">
+  When provided, returns a single saved query by ID.
+</ParamField>
+
+<ParamField query="includeArchived" type="string">
+  Set to `1` or `true` to include archived queries.
+</ParamField>
+
+<ParamField query="limit" type="number">
+  Maximum number of results to return.
+</ParamField>
+
+---
+
+### Create a saved query
+
+```
+POST /api/sql-console/saved-queries
+```
+
+<ParamField body="title" type="string" required>
+  Display name for the saved query.
+</ParamField>
+
+<ParamField body="sqlText" type="string" required>
+  SQL text content.
+</ParamField>
+
+<ParamField body="description" type="string">
+  Optional description.
+</ParamField>
+
+<ParamField body="tags" type="string[]">
+  Optional array of tag strings.
+</ParamField>
+
+<ParamField body="context" type="object">
+  Arbitrary context metadata.
+</ParamField>
+
+<ParamField body="workId" type="string">
+  Optional work/task association ID.
+</ParamField>
+
+---
+
+### Update a saved query
+
+```
+PATCH /api/sql-console/saved-queries?id={savedQueryId}
+```
+
+Accepts any subset of the create fields, plus:
+
+<ParamField body="folderId" type="string">
+  Move the query into a folder.
+</ParamField>
+
+<ParamField body="position" type="number">
+  Display position integer.
+</ParamField>
+
+<ParamField body="archivedAt" type="string">
+  Set to an ISO 8601 timestamp to archive, or `null` to unarchive.
+</ParamField>
+
+---
+
+### Delete a saved query
+
+```
+DELETE /api/sql-console/saved-queries?id={savedQueryId}
+```
+
+<ParamField query="id" type="string" required>
+  ID of the saved query to delete.
+</ParamField>
+
+## Examples
+
+<CodeGroup>
+
+```bash Get tabs
+curl -X GET https://your-dory-instance/api/sql-console/tabs \
+  -H "Cookie: <session-cookie>" \
+  -H "x-connection-id: conn_abc123"
+```
+
+```bash Save tab state
+curl -X POST https://your-dory-instance/api/sql-console/tabs \
+  -H "Cookie: <session-cookie>" \
+  -H "x-connection-id: conn_abc123" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tabId": "tab_001",
+    "state": {
+      "tabId": "tab_001",
+      "tabType": "sql",
+      "tabName": "Query 1",
+      "content": "SELECT 1",
+      "orderIndex": 0
+    }
+  }'
+```
+
+```bash Create saved query
+curl -X POST https://your-dory-instance/api/sql-console/saved-queries \
+  -H "Cookie: <session-cookie>" \
+  -H "x-connection-id: conn_abc123" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Daily active users",
+    "sqlText": "SELECT date, count(distinct user_id) FROM events GROUP BY date",
+    "tags": ["analytics"]
+  }'
+```
+
+</CodeGroup>
+
+<CodeGroup>
+
+```json tabs GET 200
+{
+  "code": 1,
+  "data": [
+    {
+      "tabId": "tab_001",
+      "tabType": "sql",
+      "tabName": "Query 1",
+      "content": "SELECT 1",
+      "orderIndex": 0
+    }
+  ]
+}
+```
+
+```json saved query 201
+{
+  "ok": true,
+  "data": {
+    "id": "sq_abc",
+    "title": "Daily active users",
+    "sqlText": "SELECT date, count(distinct user_id) FROM events GROUP BY date",
+    "tags": ["analytics"],
+    "connectionId": "conn_abc123",
+    "createdAt": "2024-06-01T10:00:00.000Z"
+  }
+}
+```
+
+</CodeGroup>
